@@ -1,7 +1,6 @@
 package com.example.snipshot
 
 import android.app.Activity
-//import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
@@ -24,6 +23,9 @@ class SnipActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize projectionManager before using it
+        projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
         // Launch system prompt for screen capture
         startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_MEDIA_PROJECTION)
