@@ -31,6 +31,7 @@ class BubbleService : Service() {
     private var initialTouchY = 0f
     private var isClick = false
     private val clickThreshold = 10 // Pixels threshold for movement to be considered a click
+    private val bubbleSpacing = 100 // Spacing between bubbles in dp
 
     override fun onCreate() {
         super.onCreate()
@@ -124,6 +125,11 @@ class BubbleService : Service() {
     }
 
     private fun createSubBubbles(mainParams: WindowManager.LayoutParams) {
+        val bubbleHeight = 60 // Height of the bubble from bubble_icon.xml
+        val totalOffsetSnip = bubbleHeight + bubbleSpacing
+        val totalOffsetSettings = totalOffsetSnip + bubbleHeight + bubbleSpacing
+        val totalOffsetHelp = totalOffsetSettings + bubbleHeight + bubbleSpacing
+
         // Snip Screen Bubble (bottom-most of the sub-bubbles)
         snipBubbleView = LayoutInflater.from(this).inflate(R.layout.bubble_icon, FrameLayout(this), false)
         snipParams = WindowManager.LayoutParams(
@@ -135,10 +141,10 @@ class BubbleService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = mainParams.x
-            y = mainParams.y - 70 // 70dp above the main bubble
+            y = mainParams.y - totalOffsetSnip
         }
         snipBubbleView?.findViewById<ImageView>(R.id.bubble_icon)?.apply {
-            setImageResource(R.drawable.ic_snip) // Set custom icon for Snip Screen
+            setImageResource(R.drawable.ic_snip)
             setOnClickListener {
                 startSnipActivity()
             }
@@ -156,10 +162,10 @@ class BubbleService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = mainParams.x
-            y = mainParams.y - 140 // 140dp above the main bubble
+            y = mainParams.y - totalOffsetSettings
         }
         settingsBubbleView?.findViewById<ImageView>(R.id.bubble_icon)?.apply {
-            setImageResource(R.drawable.ic_settings) // Set custom icon for Settings
+            setImageResource(R.drawable.ic_settings)
             setOnClickListener {
                 startActivity(Intent(applicationContext, SettingsActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -179,10 +185,10 @@ class BubbleService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = mainParams.x
-            y = mainParams.y - 210 // 210dp above the main bubble
+            y = mainParams.y - totalOffsetHelp
         }
         helpBubbleView?.findViewById<ImageView>(R.id.bubble_icon)?.apply {
-            setImageResource(R.drawable.ic_help) // Set custom icon for Help
+            setImageResource(R.drawable.ic_help)
             setOnClickListener {
                 startActivity(Intent(applicationContext, HelpActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -193,19 +199,24 @@ class BubbleService : Service() {
     }
 
     private fun updateSubBubblePositions(mainParams: WindowManager.LayoutParams) {
+        val bubbleHeight = 60 // Height of the bubble from bubble_icon.xml
+        val totalOffsetSnip = bubbleHeight + bubbleSpacing
+        val totalOffsetSettings = totalOffsetSnip + bubbleHeight + bubbleSpacing
+        val totalOffsetHelp = totalOffsetSettings + bubbleHeight + bubbleSpacing
+
         snipParams?.let {
             it.x = mainParams.x
-            it.y = mainParams.y - 70
+            it.y = mainParams.y - totalOffsetSnip
             snipBubbleView?.let { view -> windowManager.updateViewLayout(view, it) }
         }
         settingsParams?.let {
             it.x = mainParams.x
-            it.y = mainParams.y - 140
+            it.y = mainParams.y - totalOffsetSettings
             settingsBubbleView?.let { view -> windowManager.updateViewLayout(view, it) }
         }
         helpParams?.let {
             it.x = mainParams.x
-            it.y = mainParams.y - 210
+            it.y = mainParams.y - totalOffsetHelp
             helpBubbleView?.let { view -> windowManager.updateViewLayout(view, it) }
         }
     }
