@@ -32,6 +32,9 @@
             android:excludeFromRecents="true"
             android:exported="true" />
 
+        <activity android:name=".HelpActivity" />
+        <activity android:name=".SettingsActivity" />
+
         <service android:name=".BubbleService"
             android:exported="false" />
 
