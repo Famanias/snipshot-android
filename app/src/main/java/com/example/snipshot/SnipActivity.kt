@@ -18,6 +18,8 @@ import android.widget.Toast
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.graphics.createBitmap
+import java.io.File
+import java.io.FileOutputStream
 
 class SnipActivity : Activity() {
 
@@ -156,8 +158,14 @@ class SnipActivity : Activity() {
     }
 
     private fun startSnipOverlay(bitmap: Bitmap) {
+        // Save bitmap to temporary file
+        val file = File(cacheDir, "temp_screenshot_${System.currentTimeMillis()}.png")
+        FileOutputStream(file).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+
         val intent = Intent(this, SnipOverlayActivity::class.java).apply {
-            putExtra("screenshot", bitmap)
+            putExtra("screenshot_path", file.absolutePath)
         }
         startActivity(intent)
         finish()

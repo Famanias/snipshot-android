@@ -1,8 +1,10 @@
 package com.example.snipshot
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ContentValues
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
 import android.view.MotionEvent
@@ -11,6 +13,7 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.Toast
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -25,7 +28,9 @@ class SnipOverlayActivity : Activity() {
     private lateinit var imageView: ImageView
     private lateinit var drawingView: DrawingView
     private var screenshotBitmap: Bitmap? = null
+    private var screenshotPath: String? = null
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
@@ -38,10 +43,23 @@ class SnipOverlayActivity : Activity() {
         val cancelButton = findViewById<Button>(R.id.cancel_button)
         val saveButton = findViewById<Button>(R.id.save_button)
 
-        // Get the screenshot Bitmap from the Intent
-        screenshotBitmap = intent.getParcelableExtra("screenshot") as? Bitmap
-        if (screenshotBitmap == null) {
-            Log.e("SnipOverlayActivity", "Failed to receive screenshot Bitmap")
+        // Get the screenshot path from the Intent
+        screenshotPath = intent.getStringExtra("screenshot_path")
+        if (screenshotPath.isNullOrEmpty()) {
+            Log.e("SnipOverlayActivity", "Failed to receive screenshot path")
+            Toast.makeText(this, "Failed to load screenshot", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+
+        // Load the bitmap from file
+        try {
+            screenshotBitmap = BitmapFactory.decodeFile(screenshotPath)
+            if (screenshotBitmap == null) {
+                throw Exception("Bitmap decoding failed")
+            }
+        } catch (e: Exception) {
+            Log.e("SnipOverlayActivity", "Error loading screenshot: ${e.message}")
             Toast.makeText(this, "Failed to load screenshot", Toast.LENGTH_SHORT).show()
             finish()
             return
@@ -57,7 +75,6 @@ class SnipOverlayActivity : Activity() {
                 MotionEvent.ACTION_DOWN -> {
                     startX = event.x
                     startY = event.y
-                    isDrawing = true
                     drawingView.setDrawingCoordinates(startX, startY, endX, endY, isDrawing)
                     true
                 }
@@ -73,7 +90,6 @@ class SnipOverlayActivity : Activity() {
                     if (isDrawing) {
                         endX = event.x
                         endY = event.y
-                        isDrawing = false
                         drawingView.setDrawingCoordinates(startX, startY, endX, endY, isDrawing)
                     }
                     true
@@ -143,6 +159,16 @@ class SnipOverlayActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        screenshotBitmap?.recycle() // Free up memory
+        // Clean up resources
+        screenshotBitmap?.recycle()
+
+        // Delete the temporary file
+        screenshotPath?.let { path ->
+            try {
+                File(path).delete()
+            } catch (e: Exception) {
+                Log.e("SnipOverlayActivity", "Error deleting temp file: ${e.message}")
+            }
+        }
     }
 }
