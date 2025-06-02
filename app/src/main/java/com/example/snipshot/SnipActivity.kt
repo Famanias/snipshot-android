@@ -1,7 +1,9 @@
 package com.example.snipshot
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Intent
+import android.content.ServiceConnection
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
@@ -9,10 +11,7 @@ import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.os.*
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import android.widget.Toast
@@ -27,6 +26,36 @@ class SnipActivity : Activity() {
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
+    private var captureService: ScreenCaptureService? = null
+    private var isBound = false
+
+    private var resultCode: Int = RESULT_CANCELED
+    private var projectionData: Intent? = null
+
+    private val serviceConnection = object : ServiceConnection {
+        @RequiresApi(Build.VERSION_CODES.R)
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            Log.d("SnipActivity", "Service connected")
+            captureService = (service as ScreenCaptureService.LocalBinder).getService()
+
+            // Now safely obtain the MediaProjection and proceed
+            projectionData?.let { data ->
+                mediaProjection = projectionManager.getMediaProjection(resultCode, data)
+                captureService?.setMediaProjection(mediaProjection!!)
+                startSnipping()
+            } ?: run {
+                Log.e("SnipActivity", "Projection data missing")
+                Toast.makeText(this@SnipActivity, "Projection failed", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            Log.d("SnipActivity", "Service disconnected")
+            isBound = false
+            captureService = null
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,8 +70,25 @@ class SnipActivity : Activity() {
         if (requestCode == REQUEST_MEDIA_PROJECTION) {
             if (resultCode == RESULT_OK && data != null) {
                 Log.d("SnipActivity", "User clicked ALLOW on screen capture permission")
-                mediaProjection = projectionManager.getMediaProjection(resultCode, data)
-                startSnipping()
+
+                // Save the projection data and result code for later use
+                this.resultCode = resultCode
+                this.projectionData = data
+
+                // Start the foreground service first
+                val serviceIntent = Intent(this, ScreenCaptureService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+
+                isBound = bindService(
+                    serviceIntent,
+                    serviceConnection,
+                    BIND_AUTO_CREATE
+                )
+
             } else {
                 Log.d("SnipActivity", "User clicked DENY on screen capture permission")
                 Toast.makeText(this, "Permission denied", Toast.LENGTH_SHORT).show()
@@ -54,6 +100,7 @@ class SnipActivity : Activity() {
 
     @RequiresApi(Build.VERSION_CODES.R)
     private fun startSnipping() {
+        Log.d("SnipActivity", "Starting snipping process")
         val metrics = DisplayMetrics()
         val windowManager = getSystemService(WindowManager::class.java)
 
@@ -91,17 +138,19 @@ class SnipActivity : Activity() {
 
     private fun captureScreenshotAndStartOverlay() {
         imageReader?.acquireLatestImage()?.use { image ->
-            val buffer = image.planes[0].buffer
-            val pixelStride = image.planes[0].pixelStride
-            val rowStride = image.planes[0].rowStride
+            val planes = image.planes
+            val buffer = planes[0].buffer
+            val pixelStride = planes[0].pixelStride
+            val rowStride = planes[0].rowStride
             val rowPadding = rowStride - pixelStride * image.width
+
             val bitmap = createBitmap(image.width + rowPadding / pixelStride, image.height)
             bitmap.copyPixelsFromBuffer(buffer)
 
             startSnipOverlay(bitmap)
         } ?: run {
-            Log.e("SnipActivity", "Failed to acquire image from ImageReader")
-            Toast.makeText(this, "Failed to capture screenshot", Toast.LENGTH_SHORT).show()
+            Log.e("SnipActivity", "Failed to acquire image")
+            Toast.makeText(this, "Capture failed", Toast.LENGTH_SHORT).show()
             finish()
         }
     }
@@ -116,9 +165,12 @@ class SnipActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d("SnipActivity", "Cleaning up resources (VirtualDisplay, ImageReader)")
+        if (isBound) {
+            unbindService(serviceConnection)
+            isBound = false
+        }
         virtualDisplay?.release()
         imageReader?.close()
-        mediaProjection?.stop()
+        Log.d("SnipActivity", "Resources cleaned up")
     }
 }
