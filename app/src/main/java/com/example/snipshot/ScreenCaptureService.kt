@@ -1,53 +1,65 @@
 package com.example.snipshot
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
-import android.content.pm.ServiceInfo
-import android.os.Build
 import android.os.IBinder
+import android.util.Log
+import androidx.core.app.NotificationCompat
 
 class ScreenCaptureService : Service() {
 
-    override fun onCreate() {
-        super.onCreate()
-        startForeground()
+    companion object {
+        private const val NOTIFICATION_ID = 1
+        private const val CHANNEL_ID = "ScreenCaptureChannel"
     }
 
-    private fun startForeground() {
-        val channelId = "ScreenCaptureChannel"
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, createNotification())
+    }
 
-        // Create notification channel (required for Android 8.0+)
+    private fun createNotificationChannel() {
         val channel = NotificationChannel(
-            channelId,
-            "Screen Capture",
-            NotificationManager.IMPORTANCE_LOW
+            CHANNEL_ID,
+            "Screen Capture Service",
+            NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Screen capture in progress"
+            setShowBadge(false)
         }
-        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
-            .createNotificationChannel(channel)
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
+    }
 
-        // Build notification
-        val notification = Notification.Builder(this, channelId)
+    private fun createNotification(): android.app.Notification {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Screen Capture")
-            .setContentText("Recording screen...")
-            .setSmallIcon(R.drawable.ic_notification)
+            .setContentText("Capturing screen content")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
+    }
 
-        // Start foreground service with appropriate type
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                1,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            )
-        } else {
-            startForeground(1, notification)
-        }
+    override fun onDestroy() {
+        super.onDestroy()
+        stopForeground(true)
+        Log.d("ScreenCaptureService", "Service stopped")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
 }

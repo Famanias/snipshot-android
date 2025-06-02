@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">SnipShot</string>
     <string name="todo">TODO</string>
+    <string name="snip_preview">snip preview</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
 </resources>
