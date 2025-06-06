@@ -100,6 +100,14 @@ class SnipActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
     }
 
+    private val mediaProjectionCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            Log.d("SnipActivity", "MediaProjection stopped")
+            cleanupResources()
+            finish()
+        }
+    }
+
     @RequiresApi(Build.VERSION_CODES.R)
     private fun startSnipping() {
         Log.d("SnipActivity", "Starting snipping process")
@@ -119,6 +127,9 @@ class SnipActivity : Activity() {
             2
         )
 
+        // Register callback before creating virtual display
+        mediaProjection?.registerCallback(mediaProjectionCallback, Handler(Looper.getMainLooper()))
+
         virtualDisplay = mediaProjection?.createVirtualDisplay(
             "SnipShotDisplay",
             metrics.widthPixels,
@@ -136,6 +147,12 @@ class SnipActivity : Activity() {
         Handler(Looper.getMainLooper()).postDelayed({
             captureScreenshotAndStartOverlay()
         }, 500) // Delay of 500ms to allow the VirtualDisplay to render
+    }
+
+    private fun cleanupResources() {
+        mediaProjection?.unregisterCallback(mediaProjectionCallback)
+        virtualDisplay?.release()
+        imageReader?.close()
     }
 
     private fun captureScreenshotAndStartOverlay() {
