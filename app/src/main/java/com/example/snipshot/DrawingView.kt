@@ -22,31 +22,28 @@ class DrawingView : View {
         isAntiAlias = true
     }
 
-    // 1-argument constructor (used when creating the view programmatically)
     constructor(context: Context) : super(context)
-
-    // 2-argument constructor (required for XML inflation)
     constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
-
-    // 3-argument constructor (optional, for default style attributes)
     constructor(context: Context, attrs: AttributeSet?, defStyleAttr: Int) : super(context, attrs, defStyleAttr)
 
-    // Public setters to update coordinates from SnipOverlayActivity
     fun setDrawingCoordinates(startX: Float, startY: Float, endX: Float, endY: Float, isDrawing: Boolean) {
         this.startX = startX
         this.startY = startY
         this.endX = endX
         this.endY = endY
         this.isDrawing = isDrawing
-        invalidate()
+        invalidate() // Request redraw
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (isDrawing) {
-            canvas.drawRect(startX, startY, endX, endY, paint)
-        } else if (startX != endX && startY != endY) {
-            canvas.drawRect(startX, startY, endX, endY, paint)
+        if (isDrawing || (startX != endX && startY != endY)) {
+            // Normalize coordinates to ensure correct rectangle drawing
+            val left = minOf(startX, endX)
+            val top = minOf(startY, endY)
+            val right = maxOf(startX, endX)
+            val bottom = maxOf(startY, endY)
+            canvas.drawRect(left, top, right, bottom, paint)
         }
     }
 }

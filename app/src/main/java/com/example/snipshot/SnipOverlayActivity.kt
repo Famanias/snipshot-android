@@ -41,7 +41,6 @@ class SnipOverlayActivity : Activity() {
         imageView = findViewById(R.id.snip_preview)
         drawingView = findViewById(R.id.drawing_view)
         val cancelButton = findViewById<Button>(R.id.cancel_button)
-        val saveButton = findViewById<Button>(R.id.save_button)
 
         // Get the screenshot path from the Intent
         screenshotPath = intent.getStringExtra("screenshot_path")
@@ -75,6 +74,9 @@ class SnipOverlayActivity : Activity() {
                 MotionEvent.ACTION_DOWN -> {
                     startX = event.x
                     startY = event.y
+                    endX = event.x // Initialize end coordinates to start
+                    endY = event.y
+                    isDrawing = true // Start drawing
                     drawingView.setDrawingCoordinates(startX, startY, endX, endY, isDrawing)
                     true
                 }
@@ -90,7 +92,10 @@ class SnipOverlayActivity : Activity() {
                     if (isDrawing) {
                         endX = event.x
                         endY = event.y
+                        isDrawing = false // Stop drawing
                         drawingView.setDrawingCoordinates(startX, startY, endX, endY, isDrawing)
+                        // Automatically save the selected area
+                        captureSnip()
                     }
                     true
                 }
@@ -101,18 +106,15 @@ class SnipOverlayActivity : Activity() {
         cancelButton.setOnClickListener {
             finish()
         }
-
-        saveButton.setOnClickListener {
-            captureSnip()
-        }
     }
 
     private fun captureSnip() {
         screenshotBitmap?.let { bitmap ->
-            val width = (if (endX > startX) endX - startX else startX - endX).toInt()
-            val height = (if (endY > startY) endY - startY else startY - endY).toInt()
-            val left = if (endX > startX) startX.toInt() else endX.toInt()
-            val top = if (endY > startY) startY.toInt() else endY.toInt()
+            // Normalize coordinates for cropping
+            val left = minOf(startX, endX).toInt()
+            val top = minOf(startY, endY).toInt()
+            val width = (maxOf(startX, endX) - minOf(startX, endX)).toInt()
+            val height = (maxOf(startY, endY) - minOf(startY, endY)).toInt()
 
             if (width <= 0 || height <= 0) {
                 Toast.makeText(this, "Please select a valid area", Toast.LENGTH_SHORT).show()
@@ -159,10 +161,7 @@ class SnipOverlayActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Clean up resources
         screenshotBitmap?.recycle()
-
-        // Delete the temporary file
         screenshotPath?.let { path ->
             try {
                 File(path).delete()
