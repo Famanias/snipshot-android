@@ -16,6 +16,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val BACKEND_URL: String by dotenv
+        buildConfigField("String", "BACKEND_URL", "\"$BACKEND_URL\"")
     }
 
     buildTypes {
@@ -36,14 +39,17 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
+
 
 dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.volley)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
@@ -58,3 +64,4 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
 }
+

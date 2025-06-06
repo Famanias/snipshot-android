@@ -11,6 +11,11 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+
+plugins {
+    id("com.sinch.gradle.dotenv") version "0.1.0"
+}
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
