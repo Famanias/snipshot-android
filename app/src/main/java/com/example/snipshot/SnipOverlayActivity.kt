@@ -10,7 +10,6 @@ import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.Button
 import android.widget.ImageView
 import android.widget.Toast
 import java.io.File
@@ -40,7 +39,6 @@ class SnipOverlayActivity : Activity() {
 
         imageView = findViewById(R.id.snip_preview)
         drawingView = findViewById(R.id.drawing_view)
-        val cancelButton = findViewById<Button>(R.id.cancel_button)
 
         // Get the screenshot path from the Intent
         screenshotPath = intent.getStringExtra("screenshot_path")
@@ -101,10 +99,6 @@ class SnipOverlayActivity : Activity() {
                 }
                 else -> false
             }
-        }
-
-        cancelButton.setOnClickListener {
-            finish()
         }
     }
 
