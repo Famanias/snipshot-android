@@ -4,4 +4,14 @@
     <string name="snip_preview">snip preview</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
+    <string name="detected_language">Detected Language: %1$s</string>
+    <string name="translation">Translation:</string>
+    <string name="copy_translated_text">Copy translated text</string>
+    <string name="translated_text_will_appear_here">Translated text will appear here</string>
+    <string name="new_snip">New Snip</string>
+    <string name="help">Help</string>
+    <string name="settings">Settings</string>
+    <string name="extracted_text_will_appear_here">Extracted text will appear here</string>
+    <string name="copy_extracted_text">Copy extracted text</string>
+    <string name="extracted_text">Extracted Text:</string>
 </resources>

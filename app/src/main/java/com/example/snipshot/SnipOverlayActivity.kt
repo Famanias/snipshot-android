@@ -3,6 +3,7 @@ package com.example.snipshot
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ContentValues
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
@@ -13,9 +14,14 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.Toast
-import com.android.volley.Request
-import com.android.volley.toolbox.JsonObjectRequest
-import com.android.volley.toolbox.Volley
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -34,7 +40,7 @@ class SnipOverlayActivity : Activity() {
     private lateinit var drawingView: DrawingView
     private var screenshotBitmap: Bitmap? = null
     private var screenshotPath: String? = null
-    private val backendUrl = "https://snipshot-backend.onrender.com"
+    private val client = OkHttpClient()
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,11 +136,9 @@ class SnipOverlayActivity : Activity() {
                 height.coerceAtMost(bitmap.height - top)
             )
 
-            // Save the cropped bitmap locally
+            // Save the bitmap and perform OCR
             saveBitmap(croppedBitmap)
-
-            // Send cropped image to backend for OCR
-            sendOcrRequest(croppedBitmap)
+            performOcrAndTranslate(croppedBitmap)
         } ?: run {
             Log.e("SnipOverlayActivity", "Screenshot Bitmap is null")
             Toast.makeText(this, "Failed to capture snip", Toast.LENGTH_SHORT).show()
@@ -162,74 +166,66 @@ class SnipOverlayActivity : Activity() {
         }
     }
 
-    private fun sendOcrRequest(bitmap: Bitmap) {
-        // Convert bitmap to base64
-        val byteArrayOutputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
-        val byteArray = byteArrayOutputStream.toByteArray()
-        val base64Image = Base64.encodeToString(byteArray, Base64.DEFAULT)
+    private fun performOcrAndTranslate(bitmap: Bitmap) {
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                // Convert bitmap to base64
+                val byteArrayOutputStream = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
+                val imageBytes = byteArrayOutputStream.toByteArray()
+                val base64Image = Base64.encodeToString(imageBytes, Base64.DEFAULT)
 
-        // Create JSON request body
-        val requestBody = JSONObject().apply {
-            put("image_base64", base64Image)
-        }
-
-        // Create Volley request
-        val queue = Volley.newRequestQueue(this)
-        val ocrRequest = JsonObjectRequest(
-            Request.Method.POST, "$backendUrl/ocr", requestBody,
-            { response ->
-                if (response.has("error")) {
-                    Toast.makeText(this, "OCR failed: ${response.getString("error")}", Toast.LENGTH_LONG).show()
-                    finish()
-                } else {
-                    val extractedText = response.getString("text")
-                    val language = response.getString("language")
-                    // Display the extracted text (e.g., in a Toast or dialog)
-                    Toast.makeText(this, "Extracted text ($language): $extractedText", Toast.LENGTH_LONG).show()
-                    // Optionally, send translation request
-                    // sendTranslationRequest(extractedText, "en") // Uncomment to translate to English
-                    finish()
+                // Perform OCR
+                val ocrRequestBody = JSONObject().put("image_base64", base64Image).toString()
+                    .toRequestBody("application/json".toMediaType())
+                val ocrRequest = Request.Builder()
+                    .url("https://snipshot-backend.onrender.com/ocr")
+                    .post(ocrRequestBody)
+                    .build()
+                val ocrResponse = withContext(Dispatchers.IO) { client.newCall(ocrRequest).execute() }
+                if (!ocrResponse.isSuccessful) {
+                    throw Exception("OCR failed: ${ocrResponse.message}")
                 }
-            },
-            { error ->
-                Log.e("SnipOverlayActivity", "OCR request failed: ${error.message}")
-                Toast.makeText(this, "Failed to connect to OCR service", Toast.LENGTH_LONG).show()
+                val ocrData = JSONObject(ocrResponse.body?.string() ?: "{}")
+                val extractedText = ocrData.getString("text")
+                val detectedLanguage = ocrData.getString("language")
+
+                // Perform translation
+                val targetLanguage = "en" // Default to English, can be made configurable
+                val translateRequestBody = JSONObject()
+                    .put("text", extractedText)
+                    .put("target_lang", targetLanguage)
+                    .toString()
+                    .toRequestBody("application/json".toMediaType())
+                val translateRequest = Request.Builder()
+                    .url("https://snipshot-backend.onrender.com/translate")
+                    .post(translateRequestBody)
+                    .build()
+                val translateResponse = withContext(Dispatchers.IO) { client.newCall(translateRequest).execute() }
+                if (!translateResponse.isSuccessful) {
+                    throw Exception("Translation failed: ${translateResponse.message}")
+                }
+                val translateData = JSONObject(translateResponse.body?.string() ?: "{}")
+                val translatedText = if (translateData.has("error")) {
+                    "Translation error: ${translateData.getString("error")}"
+                } else {
+                    translateData.getString("translated_text")
+                }
+
+                // Launch TranslateActivity
+                val intent = Intent(this@SnipOverlayActivity, TranslateActivity::class.java).apply {
+                    putExtra("extracted_text", extractedText)
+                    putExtra("detected_language", detectedLanguage)
+                    putExtra("translated_text", translatedText)
+                }
+                startActivity(intent)
+                finish()
+            } catch (e: Exception) {
+                Log.e("SnipOverlayActivity", "Error in OCR/Translation: ${e.message}")
+                Toast.makeText(this@SnipOverlayActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                 finish()
             }
-        )
-
-        queue.add(ocrRequest)
-    }
-
-    private fun sendTranslationRequest(text: String, targetLang: String) {
-        // Create JSON request body
-        val requestBody = JSONObject().apply {
-            put("text", text)
-            put("target_lang", targetLang)
         }
-
-        // Create Volley request
-        val queue = Volley.newRequestQueue(this)
-        val translateRequest = JsonObjectRequest(
-            Request.Method.POST, "$backendUrl/translate", requestBody,
-            { response ->
-                if (response.has("error")) {
-                    Toast.makeText(this, "Translation failed: ${response.getString("error")}", Toast.LENGTH_LONG).show()
-                } else {
-                    val translatedText = response.getString("translated_text")
-                    Toast.makeText(this, "Translated text ($targetLang): $translatedText", Toast.LENGTH_LONG).show()
-                }
-                finish()
-            },
-            { error ->
-                Log.e("SnipOverlayActivity", "Translation request failed: ${error.message}")
-                Toast.makeText(this, "Failed to connect to translation service", Toast.LENGTH_LONG).show()
-                finish()
-            }
-        )
-
-        queue.add(translateRequest)
     }
 
     override fun onDestroy() {
