@@ -28,6 +28,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 class SnipOverlayActivity : Activity() {
 
@@ -40,7 +41,11 @@ class SnipOverlayActivity : Activity() {
     private lateinit var drawingView: DrawingView
     private var screenshotBitmap: Bitmap? = null
     private var screenshotPath: String? = null
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(60, TimeUnit.SECONDS) // Connection timeout
+        .readTimeout(60, TimeUnit.SECONDS)   // Read timeout
+        .writeTimeout(60, TimeUnit.SECONDS)  // Write timeout
+        .build()
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -174,6 +179,7 @@ class SnipOverlayActivity : Activity() {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
                 val imageBytes = byteArrayOutputStream.toByteArray()
                 val base64Image = Base64.encodeToString(imageBytes, Base64.DEFAULT)
+                Log.d("SnipOverlayActivity", "Sending OCR request with image size: ${imageBytes.size} bytes")
 
                 // Perform OCR
                 val ocrRequestBody = JSONObject().put("image_base64", base64Image).toString()
@@ -189,9 +195,14 @@ class SnipOverlayActivity : Activity() {
                 val ocrData = JSONObject(ocrResponse.body?.string() ?: "{}")
                 val extractedText = ocrData.getString("text")
                 val detectedLanguage = ocrData.getString("language")
+                Log.d("SnipOverlayActivity", "OCR successful: text='$extractedText', language='$detectedLanguage'")
+
+                // Get target language from SharedPreferences
+                val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
+                val targetLanguage = prefs.getString("target_language", "en") ?: "en"
+                Log.d("SnipOverlayActivity", "Translating to target language: $targetLanguage")
 
                 // Perform translation
-                val targetLanguage = "en" // Default to English, can be made configurable
                 val translateRequestBody = JSONObject()
                     .put("text", extractedText)
                     .put("target_lang", targetLanguage)
@@ -211,6 +222,7 @@ class SnipOverlayActivity : Activity() {
                 } else {
                     translateData.getString("translated_text")
                 }
+                Log.d("SnipOverlayActivity", "Translation successful: translated_text='$translatedText'")
 
                 // Launch TranslateActivity
                 val intent = Intent(this@SnipOverlayActivity, TranslateActivity::class.java).apply {
@@ -221,7 +233,7 @@ class SnipOverlayActivity : Activity() {
                 startActivity(intent)
                 finish()
             } catch (e: Exception) {
-                Log.e("SnipOverlayActivity", "Error in OCR/Translation: ${e.message}")
+                Log.e("SnipOverlayActivity", "Error in OCR/Translation: ${e.message}", e)
                 Toast.makeText(this@SnipOverlayActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                 finish()
             }

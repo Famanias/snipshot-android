@@ -45,6 +45,9 @@
 
         <activity android:name=".HelpActivity" />
         <activity android:name=".SettingsActivity" />
+        <activity android:name=".TranslateActivity" />
+
+
 
 
         <service android:name=".BubbleService"
