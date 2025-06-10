@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Select Translation Language:"
+        android:text="@string/select_translation_language"
         android:textSize="18sp"
         android:layout_marginBottom="16dp"/>
 
@@ -23,13 +23,13 @@
         android:id="@+id/save_button"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Save Settings"
+        android:text="@string/save_settings"
         android:layout_marginBottom="16dp"/>
 
     <Button
         android:id="@+id/back_button"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Back"/>
+        android:text="@string/back"/>
 
 </LinearLayout>

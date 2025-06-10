@@ -17,4 +17,7 @@
     <string name="translated_text">Translated Text</string>
     <string name="detected_language_unknown">Detected Language: Unknown</string>
     <string name="help_placeholder">Help Placeholder</string>
+    <string name="save_settings">Save Settings</string>
+    <string name="select_translation_language">Select Translation Language:</string>
+    <string name="back">Back</string>
 </resources>
