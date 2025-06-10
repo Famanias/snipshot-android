@@ -33,12 +33,12 @@
                     android:text="@string/extracted_text"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:paddingEnd="8dp" />
+                    android:padding="8dp" />
 
                 <ImageButton
                     android:id="@+id/copy_extracted"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     app:srcCompat="@drawable/baseline_content_copy_24"
                     android:contentDescription="@string/copy_extracted_text" />
 
@@ -93,12 +93,12 @@
                     android:text="@string/translation"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:paddingEnd="8dp" />
+                    android:padding="8dp" />
 
                 <ImageButton
                     android:id="@+id/copy_translated"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     app:srcCompat="@drawable/baseline_content_copy_24"
                     android:contentDescription="@string/copy_translated_text" />
 

@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +40,7 @@ class SnipOverlayActivity : Activity() {
     private var isDrawing = false
     private lateinit var imageView: ImageView
     private lateinit var drawingView: DrawingView
+    private lateinit var progressBar: ProgressBar
     private var screenshotBitmap: Bitmap? = null
     private var screenshotPath: String? = null
     private val client = OkHttpClient.Builder()
@@ -57,6 +59,7 @@ class SnipOverlayActivity : Activity() {
 
         imageView = findViewById(R.id.snip_preview)
         drawingView = findViewById(R.id.drawing_view)
+        progressBar = findViewById(R.id.ocr_progress)
 
         // Get the screenshot path from the Intent
         screenshotPath = intent.getStringExtra("screenshot_path")
@@ -173,6 +176,7 @@ class SnipOverlayActivity : Activity() {
 
     private fun performOcrAndTranslate(bitmap: Bitmap) {
         CoroutineScope(Dispatchers.Main).launch {
+            progressBar.visibility = View.VISIBLE
             try {
                 // Convert bitmap to base64
                 val byteArrayOutputStream = ByteArrayOutputStream()
@@ -235,6 +239,9 @@ class SnipOverlayActivity : Activity() {
             } catch (e: Exception) {
                 Log.e("SnipOverlayActivity", "Error in OCR/Translation: ${e.message}", e)
                 Toast.makeText(this@SnipOverlayActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+
+            } finally{
+                progressBar.visibility = View.GONE
                 finish()
             }
         }
