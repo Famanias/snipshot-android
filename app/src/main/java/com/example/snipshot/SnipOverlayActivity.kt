@@ -187,7 +187,6 @@ class SnipOverlayActivity : Activity() {
 
                 // Get backend URL from BuildConfig
                 val backendUrl = BuildConfig.BACKEND_URL
-                Log.d("SnipOverlayActivity", "Using backend URL: $backendUrl")
 
                 // Perform OCR
                 val ocrRequestBody = JSONObject().put("image_base64", base64Image).toString()

@@ -14,4 +14,7 @@
     <string name="extracted_text_will_appear_here">Extracted text will appear here</string>
     <string name="copy_extracted_text">Copy extracted text</string>
     <string name="extracted_text">Extracted Text:</string>
+    <string name="translated_text">Translated Text</string>
+    <string name="detected_language_unknown">Detected Language: Unknown</string>
+    <string name="help_placeholder">Help Placeholder</string>
 </resources>

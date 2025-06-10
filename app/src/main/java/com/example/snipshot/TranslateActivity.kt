@@ -44,4 +44,5 @@ class TranslateActivity : Activity() {
         val clip = android.content.ClipData.newPlainText("SnipShot Text", text)
         clipboard.setPrimaryClip(clip)
     }
+
 }
