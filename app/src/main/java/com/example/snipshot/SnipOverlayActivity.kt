@@ -185,11 +185,15 @@ class SnipOverlayActivity : Activity() {
                 val base64Image = Base64.encodeToString(imageBytes, Base64.DEFAULT)
                 Log.d("SnipOverlayActivity", "Sending OCR request with image size: ${imageBytes.size} bytes")
 
+                // Get backend URL from BuildConfig
+                val backendUrl = BuildConfig.BACKEND_URL
+                Log.d("SnipOverlayActivity", "Using backend URL: $backendUrl")
+
                 // Perform OCR
                 val ocrRequestBody = JSONObject().put("image_base64", base64Image).toString()
                     .toRequestBody("application/json".toMediaType())
                 val ocrRequest = Request.Builder()
-                    .url("https://snipshot-backend.onrender.com/ocr")
+                    .url("$backendUrl/ocr")
                     .post(ocrRequestBody)
                     .build()
                 val ocrResponse = withContext(Dispatchers.IO) { client.newCall(ocrRequest).execute() }
@@ -213,7 +217,7 @@ class SnipOverlayActivity : Activity() {
                     .toString()
                     .toRequestBody("application/json".toMediaType())
                 val translateRequest = Request.Builder()
-                    .url("https://snipshot-backend.onrender.com/translate")
+                    .url("$backendUrl/translate")
                     .post(translateRequestBody)
                     .build()
                 val translateResponse = withContext(Dispatchers.IO) { client.newCall(translateRequest).execute() }
