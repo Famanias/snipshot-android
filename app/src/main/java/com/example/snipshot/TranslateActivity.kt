@@ -16,23 +16,23 @@ class TranslateActivity : Activity() {
 
         // Get data from intent
         val extractedText = intent.getStringExtra("extracted_text") ?: ""
-        val detectedLanguage = intent.getStringExtra("detected_language") ?: "Unknown"
+//        val detectedLanguage = intent.getStringExtra("detected_language") ?: "Unknown"
         val translatedText = intent.getStringExtra("translated_text") ?: ""
 
         // Set up UI elements
         val extractedTextView = findViewById<TextView>(R.id.extracted_text)
-        val detectedLanguageView = findViewById<TextView>(R.id.detected_language)
+//        val detectedLanguageView = findViewById<TextView>(R.id.detected_language)
         val translatedTextView = findViewById<TextView>(R.id.translated_text)
         val copyExtractedButton = findViewById<ImageButton>(R.id.copy_extracted)
         val copyTranslatedButton = findViewById<ImageButton>(R.id.copy_translated)
-        val newSnipButton = findViewById<Button>(R.id.new_snip_button)
-        val settingsButton = findViewById<ImageButton>(R.id.settings_button)
-        val helpButton = findViewById<ImageButton>(R.id.help_button)
+//        val newSnipButton = findViewById<Button>(R.id.new_snip_button)
+//        val settingsButton = findViewById<ImageButton>(R.id.settings_button)
+//        val helpButton = findViewById<ImageButton>(R.id.help_button)
 
         // Populate UI
         extractedTextView.text = extractedText
-        val text = getString(R.string.detected_language, detectedLanguage)
-        detectedLanguageView.text = text
+//        val text = getString(R.string.detected_language, detectedLanguage)
+//        detectedLanguageView.text = text
         translatedTextView.text = translatedText
 
         // Copy buttons
@@ -46,23 +46,23 @@ class TranslateActivity : Activity() {
         }
 
         // New snip button
-        newSnipButton.setOnClickListener {
-            // TODO: Implement logic to start a new snip
-            // This could relaunch the snipping activity or service that captures the screenshot
-            Toast.makeText(this, "New snip not implemented yet", Toast.LENGTH_SHORT).show()
-        }
-
-        // Settings button
-        settingsButton.setOnClickListener {
-            // TODO: Implement settings activity
-            Toast.makeText(this, "Settings not implemented yet", Toast.LENGTH_SHORT).show()
-        }
-
-        // Help button
-        helpButton.setOnClickListener {
-            // TODO: Implement help activity or dialog
-            Toast.makeText(this, "Help not implemented yet", Toast.LENGTH_SHORT).show()
-        }
+//        newSnipButton.setOnClickListener {
+//            // TODO: Implement logic to start a new snip
+//            // This could relaunch the snipping activity or service that captures the screenshot
+//            Toast.makeText(this, "New snip not implemented yet", Toast.LENGTH_SHORT).show()
+//        }
+//
+//        // Settings button
+//        settingsButton.setOnClickListener {
+//            // TODO: Implement settings activity
+//            Toast.makeText(this, "Settings not implemented yet", Toast.LENGTH_SHORT).show()
+//        }
+//
+//        // Help button
+//        helpButton.setOnClickListener {
+//            // TODO: Implement help activity or dialog
+//            Toast.makeText(this, "Help not implemented yet", Toast.LENGTH_SHORT).show()
+//        }
     }
 
     private fun copyToClipboard(text: String) {
