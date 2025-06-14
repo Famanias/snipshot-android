@@ -216,6 +216,8 @@ class BubbleService : Service() {
             setImageResource(R.drawable.ic_snip)
             setOnClickListener {
                 startSnipActivity()
+                // Hide sub-bubbles
+                hideSubBubbles();
             }
         }
         windowManager.addView(snipBubbleView, snipParams)
@@ -239,6 +241,8 @@ class BubbleService : Service() {
                 startActivity(Intent(applicationContext, SettingsActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 })
+                // Hide sub-bubbles
+                hideSubBubbles();
             }
         }
         windowManager.addView(settingsBubbleView, settingsParams)
@@ -262,9 +266,26 @@ class BubbleService : Service() {
                 startActivity(Intent(applicationContext, HelpActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 })
+                // Hide sub-bubbles
+                hideSubBubbles();
             }
         }
         windowManager.addView(helpBubbleView, helpParams)
+    }
+
+    private fun hideSubBubbles(){
+        // Hide sub-bubbles
+        helpBubbleView?.let { windowManager.removeView(it) }
+        settingsBubbleView?.let { windowManager.removeView(it) }
+        snipBubbleView?.let { windowManager.removeView(it) }
+        helpBubbleView = null
+        settingsBubbleView = null
+        snipBubbleView = null
+        helpParams = null
+        settingsParams = null
+        snipParams = null
+        areSubBubblesVisible = false
+        Log.d("BubbleService", "Sub-bubbles hidden")
     }
 
     private fun updateSubBubblePositions(mainParams: WindowManager.LayoutParams) {
