@@ -20,4 +20,5 @@
     <string name="save_settings">Save Settings</string>
     <string name="select_translation_language">Select Translation Language:</string>
     <string name="back">Back</string>
+    <string name="drag_here_to_close">Drag here to close</string>
 </resources>
