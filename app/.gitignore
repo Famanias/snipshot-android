@@ -1,5 +1,10 @@
 /build
 
+/release
+
+/test
+
+
 .env
 .env.debug
 .env.release
