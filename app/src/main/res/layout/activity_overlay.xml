@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/overlay_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Background screenshot -->
+    <ImageView
+        android:id="@+id/overlay_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter"
+        android:contentDescription="@string/screenshot" />
+
+    <!-- Overlay container for translated boxes -->
+    <FrameLayout
+        android:id="@+id/overlay_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false" />
+
+    <!-- Bottom bar with button -->
+    <LinearLayout
+        android:id="@+id/bottom_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:padding="16dp"
+        android:background="#AA000000">
+
+        <Button
+            android:id="@+id/open_translate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/open_in_translate"
+            android:textColor="@android:color/white"
+            style="?attr/materialButtonOutlinedStyle"
+            android:backgroundTint="@color/purple_500" />
+
+    </LinearLayout>
+
+</FrameLayout>

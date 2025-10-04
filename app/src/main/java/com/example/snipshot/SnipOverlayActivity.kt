@@ -3,6 +3,7 @@ package com.example.snipshot
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ContentValues
+import com.example.snipshot.R
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -20,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import org.json.JSONArray
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -200,39 +202,66 @@ class SnipOverlayActivity : Activity() {
                     throw Exception("OCR failed: ${ocrResponse.message}")
                 }
                 val ocrData = JSONObject(ocrResponse.body?.string() ?: "{}")
-                val extractedText = ocrData.getString("text")
+                if (ocrData.has("error")) {
+                    throw Exception(ocrData.getString("error"))
+                }
+                val items = ocrData.getJSONArray("items")
                 val detectedLanguage = ocrData.getString("language")
-                Log.d("SnipOverlayActivity", "OCR successful: text='$extractedText', language='$detectedLanguage'")
 
                 // Get target language from SharedPreferences
                 val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
                 val targetLanguage = prefs.getString("target_language", "en") ?: "en"
                 Log.d("SnipOverlayActivity", "Translating to target language: $targetLanguage")
 
-                // Perform translation
-                val translateRequestBody = JSONObject()
-                    .put("text", extractedText)
-                    .put("target_lang", targetLanguage)
-                    .toString()
-                    .toRequestBody("application/json".toMediaType())
-                val translateRequest = Request.Builder()
-                    .url("$backendUrl/translate")
-                    .post(translateRequestBody)
-                    .build()
-                val translateResponse = withContext(Dispatchers.IO) { client.newCall(translateRequest).execute() }
-                if (!translateResponse.isSuccessful) {
-                    throw Exception("Translation failed: ${translateResponse.message}")
-                }
-                val translateData = JSONObject(translateResponse.body?.string() ?: "{}")
-                val translatedText = if (translateData.has("error")) {
-                    "Translation error: ${translateData.getString("error")}"
-                } else {
-                    translateData.getString("translated_text")
-                }
-                Log.d("SnipOverlayActivity", "Translation successful: translated_text='$translatedText'")
+                // Translate each item individually
+                val extractedTexts = mutableListOf<String>()
+                val boxes = mutableListOf<List<Int>>()
+                val translations = mutableListOf<String>()
+                for (i in 0 until items.length()) {
+                    val item = items.getJSONObject(i)
+                    val text = item.getString("text")
+                    extractedTexts.add(text)
+                    val bboxArr = item.getJSONArray("bbox")
+                    val bbox = listOf(bboxArr.getInt(0), bboxArr.getInt(1), bboxArr.getInt(2), bboxArr.getInt(3))
+                    boxes.add(bbox)
 
-                // Launch TranslateActivity
-                val intent = Intent(this@SnipOverlayActivity, TranslateActivity::class.java).apply {
+                    // Perform translation for this item
+                    val translateRequestBody = JSONObject()
+                        .put("text", text)
+                        .put("target_lang", targetLanguage)
+                        .toString()
+                        .toRequestBody("application/json".toMediaType())
+                    val translateRequest = Request.Builder()
+                        .url("$backendUrl/translate")
+                        .post(translateRequestBody)
+                        .build()
+                    val translateResponse = withContext(Dispatchers.IO) { client.newCall(translateRequest).execute() }
+                    if (!translateResponse.isSuccessful) {
+                        throw Exception("Translation failed for item $i: ${translateResponse.message}")
+                    }
+                    val translateData = JSONObject(translateResponse.body?.string() ?: "{}")
+                    val translated = if (translateData.has("error")) {
+                        "Translation error SnipOverlay: ${translateData.getString("error")}"
+                    } else {
+                        translateData.getString("translated_text")
+                    }
+                    translations.add(translated)
+                }
+
+                val extractedText = extractedTexts.joinToString("\n")
+                val translatedText = translations.joinToString("\n")
+
+                // Launch OverlayActivity
+                val intent = Intent(this@SnipOverlayActivity, OverlayActivity::class.java).apply {
+                    putExtra("image_bytes", imageBytes)
+                    val overlaysArray = JSONArray()
+                    for (j in 0 until boxes.size) {
+                        val obj = JSONObject()
+                        obj.put("bbox", JSONArray(boxes[j]))
+                        obj.put("translated", translations[j])
+                        overlaysArray.put(obj)
+                    }
+                    putExtra("overlays_json", overlaysArray.toString())
                     putExtra("extracted_text", extractedText)
                     putExtra("detected_language", detectedLanguage)
                     putExtra("translated_text", translatedText)
@@ -242,10 +271,8 @@ class SnipOverlayActivity : Activity() {
             } catch (e: Exception) {
                 Log.e("SnipOverlayActivity", "Error in OCR/Translation: ${e.message}", e)
                 Toast.makeText(this@SnipOverlayActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-
-            } finally{
+            } finally {
                 progressBar.visibility = View.GONE
-                finish()
             }
         }
     }
