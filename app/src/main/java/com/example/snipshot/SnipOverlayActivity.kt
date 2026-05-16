@@ -146,9 +146,16 @@ class SnipOverlayActivity : Activity() {
                 height.coerceAtMost(bitmap.height - top)
             )
 
-            // Save the bitmap and perform OCR
             saveBitmap(croppedBitmap)
-            performOcrAndTranslate(croppedBitmap)
+            
+            val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
+            val savedMode = prefs.getString("translation_mode", TranslationMode.MODE_2_SIMPLE_OCR.name)
+
+            if (savedMode == TranslationMode.MODE_1_MANGA.name) {
+                performMode1Manga(croppedBitmap)
+            } else {
+                performMode2OCR(croppedBitmap)
+            }
         } ?: run {
             Log.e("SnipOverlayActivity", "Screenshot Bitmap is null")
             Toast.makeText(this, "Failed to capture snip", Toast.LENGTH_SHORT).show()
@@ -176,7 +183,76 @@ class SnipOverlayActivity : Activity() {
         }
     }
 
-    private fun performOcrAndTranslate(bitmap: Bitmap) {
+    private fun performMode1Manga(bitmap: Bitmap) {
+        CoroutineScope(Dispatchers.Main).launch {
+            progressBar.visibility = View.VISIBLE
+            try {
+                val byteArrayOutputStream = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
+                val imageBytes = byteArrayOutputStream.toByteArray()
+
+                val backendUrl = BuildConfig.BACKEND_URL
+                val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
+                val targetLanguage = prefs.getString("target_language", "en") ?: "en"
+                
+                // Map language codes to 3-letter formats expected by manga translator if needed, or just send directly
+                val targetLang3 = when(targetLanguage) {
+                    "en" -> "ENG"
+                    "ja" -> "JPN"
+                    "ko" -> "KOR"
+                    "zh_cn" -> "CHS"
+                    "zh_tw" -> "CHT"
+                    else -> "ENG"
+                }
+
+                val detectorSize = prefs.getInt("detector_size", 1536)
+                val boxThreshold = prefs.getFloat("box_threshold", 0.7f).toDouble()
+                val textThreshold = prefs.getFloat("text_threshold", 0.5f).toDouble()
+
+                val configJson = JSONObject().apply {
+                    put("translator", JSONObject().put("target_lang", targetLang3))
+                    put("detector", JSONObject().apply {
+                        put("detection_size", detectorSize)
+                        put("box_threshold", boxThreshold)
+                        put("text_threshold", textThreshold)
+                    })
+                }
+
+                val requestBody = okhttp3.MultipartBody.Builder()
+                    .setType(okhttp3.MultipartBody.FORM)
+                    .addFormDataPart("image", "snip.png", imageBytes.toRequestBody("image/png".toMediaType()))
+                    .addFormDataPart("config", configJson.toString())
+                    .build()
+
+                val request = Request.Builder()
+                    .url("$backendUrl/translate/raw")
+                    .post(requestBody)
+                    .build()
+
+                val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
+                
+                if (!response.isSuccessful) {
+                    throw Exception("Manga Translation failed: ${response.message}")
+                }
+
+                val responseBytes = response.body?.bytes() ?: throw Exception("Empty response body")
+                
+                val intent = Intent(this@SnipOverlayActivity, MangaResultActivity::class.java).apply {
+                    putExtra("image_bytes", responseBytes)
+                }
+                startActivity(intent)
+                finish()
+
+            } catch (e: Exception) {
+                Log.e("SnipOverlayActivity", "Error in Manga Translation: ${e.message}", e)
+                Toast.makeText(this@SnipOverlayActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                progressBar.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun performMode2OCR(bitmap: Bitmap) {
         CoroutineScope(Dispatchers.Main).launch {
             progressBar.visibility = View.VISIBLE
             try {

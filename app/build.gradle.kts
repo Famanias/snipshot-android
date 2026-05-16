@@ -19,6 +19,9 @@ android {
 
         val BACKEND_URL: String by dotenv
         buildConfigField("String", "BACKEND_URL", "\"$BACKEND_URL\"")
+
+        val DATABASE_API_URL: String by dotenv
+        buildConfigField("String", "DATABASE_API_URL", "\"$DATABASE_API_URL\"")
     }
 
     buildTypes {
@@ -69,5 +72,9 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
+    // New dependencies for Dashboard, Cloud Storage, Settings
+    implementation("io.coil-kt:coil:2.6.0")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("com.github.chrisbanes:PhotoView:2.3.0")
 }
 

@@ -1,0 +1,98 @@
+package com.example.snipshot.ui
+
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
+import coil.load
+import com.example.snipshot.R
+import java.io.File
+
+sealed class FileItem {
+    data class Folder(val id: Int, val name: String, val count: Int = 0) : FileItem()
+    data class CloudImage(val id: Int, val filename: String, val url: String) : FileItem()
+    data class LocalImage(val file: File) : FileItem()
+}
+
+class FileItemAdapter(
+    private var items: List<FileItem>,
+    private val onFolderClick: (FileItem.Folder) -> Unit,
+    private val onImageClick: (FileItem) -> Unit,
+    private val onFolderLongClick: (FileItem.Folder, View) -> Unit,
+    private val onImageLongClick: (FileItem, View) -> Unit
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
+    companion object {
+        const val TYPE_FOLDER = 1
+        const val TYPE_IMAGE = 2
+    }
+
+    override fun getItemViewType(position: Int): Int {
+        return when (items[position]) {
+            is FileItem.Folder -> TYPE_FOLDER
+            is FileItem.CloudImage, is FileItem.LocalImage -> TYPE_IMAGE
+        }
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        val inflater = LayoutInflater.from(parent.context)
+        return if (viewType == TYPE_FOLDER) {
+            FolderViewHolder(inflater.inflate(R.layout.item_folder, parent, false))
+        } else {
+            ImageViewHolder(inflater.inflate(R.layout.item_image, parent, false))
+        }
+    }
+
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (val item = items[position]) {
+            is FileItem.Folder -> (holder as FolderViewHolder).bind(item)
+            is FileItem.CloudImage -> (holder as ImageViewHolder).bindCloud(item)
+            is FileItem.LocalImage -> (holder as ImageViewHolder).bindLocal(item)
+        }
+    }
+
+    override fun getItemCount() = items.size
+
+    fun updateData(newItems: List<FileItem>) {
+        items = newItems
+        notifyDataSetChanged()
+    }
+
+    inner class FolderViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        private val tvName: TextView = view.findViewById(R.id.tv_folder_name)
+        
+        fun bind(item: FileItem.Folder) {
+            tvName.text = item.name
+            itemView.setOnClickListener { onFolderClick(item) }
+            itemView.setOnLongClickListener {
+                onFolderLongClick(item, itemView)
+                true
+            }
+        }
+    }
+
+    inner class ImageViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        private val ivThumb: ImageView = view.findViewById(R.id.iv_thumbnail)
+        private val tvName: TextView = view.findViewById(R.id.tv_filename)
+
+        fun bindCloud(item: FileItem.CloudImage) {
+            tvName.text = item.filename
+            ivThumb.load(item.url) {
+                crossfade(true)
+            }
+            itemView.setOnClickListener { onImageClick(item) }
+            itemView.setOnLongClickListener { onImageLongClick(item, itemView); true }
+        }
+
+        fun bindLocal(item: FileItem.LocalImage) {
+            tvName.text = item.file.name
+            ivThumb.load(item.file) {
+                crossfade(true)
+            }
+            itemView.setOnClickListener { onImageClick(item) }
+            itemView.setOnLongClickListener { onImageLongClick(item, itemView); true }
+        }
+    }
+}

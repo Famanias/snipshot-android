@@ -1,7 +1,9 @@
 package com.example.snipshot
 
-import android.app.Activity
+import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
 import android.os.Bundle
 import android.util.Base64
@@ -11,25 +13,32 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
-import android.content.Intent
+import android.widget.Toast
 import org.json.JSONArray
-//import org.json.JSONObject
-//import com.example.snipshot.R
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.example.snipshot.api.ApiClient
+import com.example.snipshot.ui.FolderPickerBottomSheet
+import com.example.snipshot.utils.StorageManager
+import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 
-class OverlayActivity : Activity() {
+class OverlayActivity : AppCompatActivity() {
 
     private lateinit var overlayImage: ImageView
     private lateinit var overlayContainer: FrameLayout
     private lateinit var openTranslate: Button
+    private lateinit var btnSave: Button
     private lateinit var overlays: List<OverlayItem>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_overlay)
 
-    overlayImage = findViewById<ImageView>(R.id.overlay_image)
-    overlayContainer = findViewById<FrameLayout>(R.id.overlay_container)
-    openTranslate = findViewById<Button>(R.id.open_translate)
+        overlayImage = findViewById<ImageView>(R.id.overlay_image)
+        overlayContainer = findViewById<FrameLayout>(R.id.overlay_container)
+        openTranslate = findViewById<Button>(R.id.open_translate)
+        btnSave = findViewById<Button>(R.id.btn_save)
 
         // Support either a raw byte[] image (sent as "image_bytes") or a base64 string ("image_base64")
         val imageBytesFromIntent = intent.getByteArrayExtra("image_bytes")
@@ -95,6 +104,53 @@ class OverlayActivity : Activity() {
                 putExtra("extracted_text", extracted)
             }
             startActivity(intent)
+        }
+
+        btnSave.setOnClickListener {
+            saveImage()
+        }
+    }
+
+    private fun saveImage() {
+        if (overlayImage.width == 0 || overlayImage.height == 0) return
+
+        val bitmap = Bitmap.createBitmap(overlayImage.width, overlayImage.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        overlayImage.draw(canvas)
+        overlayContainer.draw(canvas)
+
+        if (ApiClient.isLoggedIn()) {
+            val bottomSheet = FolderPickerBottomSheet { folderId ->
+                uploadToCloud(bitmap, folderId)
+            }
+            bottomSheet.show(supportFragmentManager, "FolderPicker")
+        } else {
+            val file = StorageManager.saveLocally(this, bitmap)
+            if (file != null) {
+                Toast.makeText(this, "Saved locally", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Failed to save locally", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun uploadToCloud(bitmap: Bitmap, folderId: Int?) {
+        val stream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        val imageBytes = stream.toByteArray()
+        val filename = "snipshot_${System.currentTimeMillis()}.png"
+
+        Toast.makeText(this, "Uploading...", Toast.LENGTH_SHORT).show()
+        btnSave.isEnabled = false
+
+        lifecycleScope.launch {
+            val result = ApiClient.uploadImage(imageBytes, filename, folderId)
+            btnSave.isEnabled = true
+            if (result.isSuccess) {
+                Toast.makeText(this@OverlayActivity, "Saved to cloud", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this@OverlayActivity, "Failed to upload to cloud", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

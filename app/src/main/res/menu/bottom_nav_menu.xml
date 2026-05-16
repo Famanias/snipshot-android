@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_my_files"
+        android:icon="@android:drawable/ic_menu_gallery"
+        android:title="My Files" />
+    <item
+        android:id="@+id/nav_recent"
+        android:icon="@android:drawable/ic_menu_recent_history"
+        android:title="Recent" />
+    <item
+        android:id="@+id/nav_settings"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:title="Settings" />
+</menu>
