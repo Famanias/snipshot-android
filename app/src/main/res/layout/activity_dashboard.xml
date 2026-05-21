@@ -9,17 +9,25 @@
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary"
         app:layout_constraintTop_toTopOf="parent"
         app:elevation="0dp">
 
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/toolbar"
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="100dp"
-            android:background="?attr/colorPrimary"
-            app:title="SnipShot"
-            app:titleTextColor="@android:color/white"
-            app:titleTextAppearance="@style/ToolbarTitleStyle" />
+            android:layout_height="@dimen/header_height">
+
+            <androidx.appcompat.widget.Toolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:background="@android:color/transparent"
+                app:title="SnipShot"
+                app:titleTextColor="@android:color/white"
+                app:titleTextAppearance="@style/ToolbarTitleStyle" />
+
+        </FrameLayout>
 
     </com.google.android.material.appbar.AppBarLayout>
 
@@ -35,7 +43,7 @@
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_navigation"
         android:layout_width="match_parent"
-        android:layout_height="112dp"
+        android:layout_height="@dimen/footer_height"
         app:layout_constraintBottom_toBottomOf="parent"
         app:menu="@menu/bottom_nav_menu" />
 

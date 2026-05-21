@@ -7,22 +7,38 @@
     android:background="@color/background">
 
     <!-- Custom App Bar -->
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
+        android:layout_height="wrap_content"
         android:background="@color/primary"
-        app:title="Translation Details"
-        app:titleTextColor="@color/white"
-        app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/white"
-        app:titleTextAppearance="@style/ToolbarTitleStyle"
-        android:elevation="4dp" />
+        app:elevation="4dp">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/header_height">
+
+            <androidx.appcompat.widget.Toolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:background="@android:color/transparent"
+                app:title="Translation Details"
+                app:titleTextColor="@color/white"
+                app:navigationIcon="@drawable/ic_arrow_back"
+                app:navigationIconTint="@color/white"
+                app:titleTextAppearance="@style/ToolbarTitleStyle" />
+
+        </FrameLayout>
+
+    </com.google.android.material.appbar.AppBarLayout>
 
     <!-- Scrollable main content -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:fillViewport="true">
 
         <LinearLayout
@@ -226,5 +242,12 @@
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>
+
+    <!-- Standardized footer matching dashboard bottom navigation bar height -->
+    <View
+        android:id="@+id/footer_view"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/footer_height"
+        android:background="?attr/colorSurfaceContainer" />
 
 </LinearLayout>

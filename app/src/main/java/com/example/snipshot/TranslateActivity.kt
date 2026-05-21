@@ -6,16 +6,40 @@ import android.view.View
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.appbar.MaterialToolbar
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.card.MaterialCardView
 import java.util.Locale
 
 class TranslateActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_translate)
+
+        val appBarLayout = findViewById<com.google.android.material.appbar.AppBarLayout>(R.id.appBarLayout)
+        val footerView = findViewById<android.view.View>(R.id.footer_view)
+
+        ViewCompat.setOnApplyWindowInsetsListener(appBarLayout) { view, insets ->
+            val statusBarInsets = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            view.setPadding(0, statusBarInsets.top, 0, 0)
+            insets
+        }
+
+        val baseFooterPadding = footerView.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(footerView) { view, insets ->
+            val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            view.setPadding(
+                view.paddingLeft,
+                view.paddingTop,
+                view.paddingRight,
+                baseFooterPadding + navBarInsets.bottom
+            )
+            insets
+        }
 
         // Get data from intent
         val detectedLanguage = intent.getStringExtra("detected_language")
@@ -24,7 +48,7 @@ class TranslateActivity : AppCompatActivity() {
         val summary = intent.getStringExtra("summary")
 
         // Set up Toolbar
-        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
+        val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         toolbar.setNavigationOnClickListener {
             finish()
         }

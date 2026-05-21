@@ -11,9 +11,12 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
 import android.widget.TextView
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.example.snipshot.api.ApiClient
 
 class SettingsActivity : AppCompatActivity() {
@@ -31,10 +34,39 @@ class SettingsActivity : AppCompatActivity() {
     private var initializing = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
         sharedPreferences = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
+
+        val appBarLayout = findViewById<com.google.android.material.appbar.AppBarLayout>(R.id.appBarLayout)
+        val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+        val footerView = findViewById<android.view.View>(R.id.footer_view)
+
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        toolbar.setNavigationOnClickListener {
+            finish()
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(appBarLayout) { view, insets ->
+            val statusBarInsets = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            view.setPadding(0, statusBarInsets.top, 0, 0)
+            insets
+        }
+
+        val baseFooterPadding = footerView.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(footerView) { view, insets ->
+            val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            view.setPadding(
+                view.paddingLeft,
+                view.paddingTop,
+                view.paddingRight,
+                baseFooterPadding + navBarInsets.bottom
+            )
+            insets
+        }
 
         val modeRadioGroup = findViewById<android.widget.RadioGroup>(R.id.mode_radio_group)
         val advancedLayout = findViewById<android.widget.LinearLayout>(R.id.advanced_settings_layout)
@@ -42,7 +74,6 @@ class SettingsActivity : AppCompatActivity() {
         val etBoxThreshold = findViewById<android.widget.EditText>(R.id.et_box_threshold)
         val etTextThreshold = findViewById<android.widget.EditText>(R.id.et_text_threshold)
         val languageSpinner = findViewById<Spinner>(R.id.language_spinner)
-        val backButton = findViewById<Button>(R.id.back_button)
         val btnLogout = findViewById<Button>(R.id.btn_logout)
         val tvAccountEmail = findViewById<TextView>(R.id.tv_account_email)
 
@@ -144,8 +175,6 @@ class SettingsActivity : AppCompatActivity() {
 
         // ── Done initialising ─────────────────────────────────────────────────
         initializing = false
-
-        backButton.setOnClickListener { finish() }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

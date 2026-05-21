@@ -16,17 +16,9 @@ class BubbleService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var mainBubbleView: View
-    private var helpBubbleView: View? = null
-    private var settingsBubbleView: View? = null
-    private var snipBubbleView: View? = null
     private var closeIconView: ImageView? = null
-    private var areSubBubblesVisible = false
     private var isDragging = false
 
-    // Store LayoutParams for each sub-bubble
-    private var helpParams: WindowManager.LayoutParams? = null
-    private var settingsParams: WindowManager.LayoutParams? = null
-    private var snipParams: WindowManager.LayoutParams? = null
     private var closeIconParams: WindowManager.LayoutParams? = null
 
     private var initialX = 0
@@ -35,7 +27,6 @@ class BubbleService : Service() {
     private var initialTouchY = 0f
     private var isClick = false
     private val clickThreshold = 10 // Pixels threshold for movement to be considered a click
-    private val bubbleSpacing = 100 // Spacing between bubbles in dp
     private val closeIconSize = 70 // Size of the close icon in dp
 
     override fun onCreate() {
@@ -63,7 +54,7 @@ class BubbleService : Service() {
         val mainBubble = mainBubbleView.findViewById<ImageView>(R.id.bubble_icon).apply {
             setImageResource(R.drawable.ic_main) // Set a custom icon for the main bubble
             setOnClickListener {
-                toggleSubBubbles(mainParams)
+                startSnipActivity()
             }
         }
 
@@ -107,10 +98,6 @@ class BubbleService : Service() {
                     mainParams.x = initialX + (event.rawX - initialTouchX).toInt()
                     mainParams.y = initialY + (event.rawY - initialTouchY).toInt()
                     windowManager.updateViewLayout(mainBubbleView, mainParams)
-
-                    if (areSubBubblesVisible) {
-                        updateSubBubblePositions(mainParams)
-                    }
                     true
                 }
                 else -> false
@@ -171,146 +158,6 @@ class BubbleService : Service() {
         return (dp * resources.displayMetrics.density).toInt()
     }
 
-    private fun toggleSubBubbles(mainParams: WindowManager.LayoutParams) {
-        if (areSubBubblesVisible) {
-            // Hide sub-bubbles
-            helpBubbleView?.let { windowManager.removeView(it) }
-            settingsBubbleView?.let { windowManager.removeView(it) }
-            snipBubbleView?.let { windowManager.removeView(it) }
-            helpBubbleView = null
-            settingsBubbleView = null
-            snipBubbleView = null
-            helpParams = null
-            settingsParams = null
-            snipParams = null
-            areSubBubblesVisible = false
-            Log.d("BubbleService", "Sub-bubbles hidden")
-        } else {
-            // Show sub-bubbles
-            createSubBubbles(mainParams)
-            areSubBubblesVisible = true
-            Log.d("BubbleService", "Sub-bubbles shown")
-        }
-    }
-
-    private fun createSubBubbles(mainParams: WindowManager.LayoutParams) {
-        val bubbleHeight = 60 // Height of the bubble from bubble_icon.xml
-        val totalOffsetSnip = bubbleHeight + bubbleSpacing
-        val totalOffsetSettings = totalOffsetSnip + bubbleHeight + bubbleSpacing
-        val totalOffsetHelp = totalOffsetSettings + bubbleHeight + bubbleSpacing
-
-        // Snip Screen Bubble (bottom-most of the sub-bubbles)
-        snipBubbleView = LayoutInflater.from(this).inflate(R.layout.bubble_icon, FrameLayout(this), false)
-        snipParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = mainParams.x
-            y = mainParams.y - totalOffsetSnip
-        }
-        snipBubbleView?.findViewById<ImageView>(R.id.bubble_icon)?.apply {
-            setImageResource(R.drawable.ic_snip)
-            setOnClickListener {
-                startSnipActivity()
-                // Hide sub-bubbles
-                hideSubBubbles();
-            }
-        }
-        windowManager.addView(snipBubbleView, snipParams)
-
-        // Settings Bubble (middle of the sub-bubbles)
-        settingsBubbleView = LayoutInflater.from(this).inflate(R.layout.bubble_icon, FrameLayout(this), false)
-        settingsParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = mainParams.x
-            y = mainParams.y - totalOffsetSettings
-        }
-        settingsBubbleView?.findViewById<ImageView>(R.id.bubble_icon)?.apply {
-            setImageResource(R.drawable.ic_settings)
-            setOnClickListener {
-                startActivity(Intent(applicationContext, SettingsActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                })
-                // Hide sub-bubbles
-                hideSubBubbles();
-            }
-        }
-        windowManager.addView(settingsBubbleView, settingsParams)
-
-        // Help Bubble (top-most of the sub-bubbles)
-        helpBubbleView = LayoutInflater.from(this).inflate(R.layout.bubble_icon, FrameLayout(this), false)
-        helpParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = mainParams.x
-            y = mainParams.y - totalOffsetHelp
-        }
-        helpBubbleView?.findViewById<ImageView>(R.id.bubble_icon)?.apply {
-            setImageResource(R.drawable.ic_help)
-            setOnClickListener {
-                startActivity(Intent(applicationContext, HelpActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                })
-                // Hide sub-bubbles
-                hideSubBubbles();
-            }
-        }
-        windowManager.addView(helpBubbleView, helpParams)
-    }
-
-    private fun hideSubBubbles(){
-        // Hide sub-bubbles
-        helpBubbleView?.let { windowManager.removeView(it) }
-        settingsBubbleView?.let { windowManager.removeView(it) }
-        snipBubbleView?.let { windowManager.removeView(it) }
-        helpBubbleView = null
-        settingsBubbleView = null
-        snipBubbleView = null
-        helpParams = null
-        settingsParams = null
-        snipParams = null
-        areSubBubblesVisible = false
-        Log.d("BubbleService", "Sub-bubbles hidden")
-    }
-
-    private fun updateSubBubblePositions(mainParams: WindowManager.LayoutParams) {
-        val bubbleHeight = 60 // Height of the bubble from bubble_icon.xml
-        val totalOffsetSnip = bubbleHeight + bubbleSpacing
-        val totalOffsetSettings = totalOffsetSnip + bubbleHeight + bubbleSpacing
-        val totalOffsetHelp = totalOffsetSettings + bubbleHeight + bubbleSpacing
-
-        snipParams?.let {
-            it.x = mainParams.x
-            it.y = mainParams.y - totalOffsetSnip
-            snipBubbleView?.let { view -> windowManager.updateViewLayout(view, it) }
-        }
-        settingsParams?.let {
-            it.x = mainParams.x
-            it.y = mainParams.y - totalOffsetSettings
-            settingsBubbleView?.let { view -> windowManager.updateViewLayout(view, it) }
-        }
-        helpParams?.let {
-            it.x = mainParams.x
-            it.y = mainParams.y - totalOffsetHelp
-            helpBubbleView?.let { view -> windowManager.updateViewLayout(view, it) }
-        }
-    }
-
     private fun startSnipActivity() {
         Intent(applicationContext, SnipActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -332,9 +179,6 @@ class BubbleService : Service() {
         if (::mainBubbleView.isInitialized) {
             windowManager.removeView(mainBubbleView)
         }
-        helpBubbleView?.let { windowManager.removeView(it) }
-        settingsBubbleView?.let { windowManager.removeView(it) }
-        snipBubbleView?.let { windowManager.removeView(it) }
         closeIconView?.let { windowManager.removeView(it) }
     }
 

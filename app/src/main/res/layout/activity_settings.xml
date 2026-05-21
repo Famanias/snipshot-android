@@ -1,8 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBarLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary"
+        app:elevation="0dp">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/header_height">
+
+            <androidx.appcompat.widget.Toolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:background="@android:color/transparent"
+                app:title="Settings"
+                app:titleTextColor="@android:color/white"
+                app:navigationIcon="@drawable/ic_arrow_back"
+                app:navigationIconTint="@color/white"
+                app:titleTextAppearance="@style/ToolbarTitleStyle" />
+
+        </FrameLayout>
+
+    </com.google.android.material.appbar.AppBarLayout>
 
     <ScrollView
         android:layout_width="match_parent"
@@ -146,13 +174,11 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- ── Back button pinned at bottom ──────────────────────────────── -->
-    <Button
-        android:id="@+id/back_button"
+    <!-- Standardized footer matching dashboard bottom navigation bar height -->
+    <View
+        android:id="@+id/footer_view"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        style="?attr/materialButtonOutlinedStyle"
-        android:text="@string/back" />
+        android:layout_height="@dimen/footer_height"
+        android:background="?attr/colorSurfaceContainer" />
 
 </LinearLayout>
