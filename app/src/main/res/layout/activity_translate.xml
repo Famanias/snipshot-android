@@ -1,84 +1,230 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:background="@color/background">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/extracted_text"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="4dp" />
-
-    <TextView
-        android:id="@+id/extracted_text"
+    <!-- Custom App Bar -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="#FFE0E0E0"
-        android:padding="8dp"
-        android:scrollbars="vertical"
-        android:text="@string/extracted_text_will_appear_here"
-        android:textColor="@android:color/black"
-        android:textSize="14sp" />
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/primary"
+        app:title="Translation Details"
+        app:titleTextColor="@color/white"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationIconTint="@color/white"
+        app:titleTextAppearance="@style/ToolbarTitleStyle"
+        android:elevation="4dp" />
 
-    <LinearLayout
+    <!-- Scrollable main content -->
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="end"
-        android:layout_marginTop="4dp">
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
-        <ImageButton
-            android:id="@+id/copy_extracted"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:src="@drawable/ic_menu_copy"
-            app:tint="@android:color/black"
-            android:contentDescription="@string/copy_extracted_text" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
 
-    </LinearLayout>
+            <!-- Detected Language Badge Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/language_badge_card"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/outline_variant"
+                app:strokeWidth="1dp"
+                app:cardBackgroundColor="@color/surface_container_lowest">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/translated_text"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="4dp" />
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="6dp">
 
-    <TextView
-        android:id="@+id/translated_text"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="#FFE0E0E0"
-        android:padding="8dp"
-        android:scrollbars="vertical"
-        android:text="@string/translated_text_will_appear_here"
-        android:textColor="@android:color/black"
-        android:textSize="14sp" />
+                    <TextView
+                        android:id="@+id/detected_language"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/detected_language_unknown"
+                        android:textColor="@color/primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="end"
-        android:layout_marginTop="4dp">
+                </LinearLayout>
 
-        <ImageButton
-            android:id="@+id/copy_translated"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:src="@drawable/ic_menu_copy"
-            app:tint="@android:color/black"
-            android:contentDescription="@string/copy_translated_text" />
+            </com.google.android.material.card.MaterialCardView>
 
-    </LinearLayout>
+            <!-- Extracted/Original Text Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="@color/surface_container_lowest">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentStart="true"
+                            android:layout_centerVertical="true"
+                            android:text="Original Text"
+                            android:textColor="@color/on_surface_variant"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <ImageButton
+                            android:id="@+id/copy_extracted"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:layout_alignParentEnd="true"
+                            android:layout_centerVertical="true"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_menu_copy"
+                            android:contentDescription="@string/copy_extracted_text"
+                            app:tint="@color/primary" />
+
+                    </RelativeLayout>
+
+                    <TextView
+                        android:id="@+id/extracted_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minLines="3"
+                        android:textIsSelectable="true"
+                        android:text="@string/extracted_text_will_appear_here"
+                        android:textColor="@color/on_surface"
+                        android:textSize="15sp"
+                        android:lineSpacingMultiplier="1.2" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Translated Text Card (Emphasized) -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/primary"
+                app:cardBackgroundColor="@color/secondary_container">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentStart="true"
+                            android:layout_centerVertical="true"
+                            android:text="Translation"
+                            android:textColor="@color/primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <ImageButton
+                            android:id="@+id/copy_translated"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:layout_alignParentEnd="true"
+                            android:layout_centerVertical="true"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_menu_copy"
+                            android:contentDescription="@string/copy_translated_text"
+                            app:tint="@color/primary" />
+
+                    </RelativeLayout>
+
+                    <TextView
+                        android:id="@+id/translated_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minLines="3"
+                        android:textIsSelectable="true"
+                        android:text="@string/translated_text_will_appear_here"
+                        android:textColor="@color/on_surface"
+                        android:textSize="17sp"
+                        android:textStyle="bold"
+                        android:lineSpacingMultiplier="1.25" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Optional Summary Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/summary_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:visibility="gone"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="@color/surface_container_lowest">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:text="Context Summary"
+                        android:textColor="@color/on_surface_variant"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/summary_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/on_surface"
+                        android:textSize="15sp"
+                        android:lineSpacingMultiplier="1.2" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+
+    </androidx.core.widget.NestedScrollView>
 
 </LinearLayout>

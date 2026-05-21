@@ -99,9 +99,11 @@ class OverlayActivity : AppCompatActivity() {
 
         // Redirect to TranslateActivity when clicked
         openTranslate.setOnClickListener {
-            val extracted = overlays.joinToString("\n") { it.text }
             val intent = Intent(this, TranslateActivity::class.java).apply {
-                putExtra("extracted_text", extracted)
+                putExtra("detected_language", this@OverlayActivity.intent.getStringExtra("detected_language"))
+                putExtra("extracted_text", this@OverlayActivity.intent.getStringExtra("extracted_text") ?: overlays.joinToString("\n") { it.text })
+                putExtra("translated_text", this@OverlayActivity.intent.getStringExtra("translated_text"))
+                putExtra("summary", this@OverlayActivity.intent.getStringExtra("summary"))
             }
             startActivity(intent)
         }
