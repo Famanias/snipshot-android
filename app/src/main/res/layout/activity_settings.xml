@@ -37,7 +37,7 @@
                 android:id="@+id/btn_logout"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:text="Log Out"
                 android:visibility="gone"
                 android:layout_marginBottom="24dp" />
