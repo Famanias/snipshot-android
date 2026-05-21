@@ -4,22 +4,47 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import com.example.snipshot.api.ApiClient
 import com.example.snipshot.ui.MyFilesFragment
 import com.example.snipshot.ui.RecentFragment
+import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.bottomnavigation.BottomNavigationView
 
 class DashboardActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_dashboard)
 
+        val appBarLayout = findViewById<AppBarLayout>(R.id.appBarLayout)
+        val bottomNav = findViewById<BottomNavigationView>(R.id.bottom_navigation)
+
+        ViewCompat.setOnApplyWindowInsetsListener(appBarLayout) { view, insets ->
+            val statusBarInsets = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            view.setPadding(0, statusBarInsets.top, 0, 0)
+            insets
+        }
+
+        val baseBottomNavigationPadding = bottomNav.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(bottomNav) { view, insets ->
+            val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            view.setPadding(
+                view.paddingLeft,
+                view.paddingTop,
+                view.paddingRight,
+                baseBottomNavigationPadding + navBarInsets.bottom
+            )
+            insets
+        }
+
         setSupportActionBar(findViewById(R.id.toolbar))
 
-        val bottomNav = findViewById<BottomNavigationView>(R.id.bottom_navigation)
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_my_files -> {

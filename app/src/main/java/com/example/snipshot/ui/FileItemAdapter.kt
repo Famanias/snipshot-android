@@ -18,6 +18,7 @@ sealed class FileItem {
 
 class FileItemAdapter(
     private var items: List<FileItem>,
+    private val isHorizontal: Boolean = false,
     private val onFolderClick: (FileItem.Folder) -> Unit,
     private val onImageClick: (FileItem) -> Unit,
     private val onFolderLongClick: (FileItem.Folder, View) -> Unit,
@@ -39,7 +40,17 @@ class FileItemAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
         return if (viewType == TYPE_FOLDER) {
-            FolderViewHolder(inflater.inflate(R.layout.item_folder, parent, false))
+            val view = inflater.inflate(R.layout.item_folder, parent, false)
+            if (isHorizontal) {
+                val density = parent.context.resources.displayMetrics.density
+                val widthPx = (140 * density).toInt()
+                val params = view.layoutParams
+                if (params != null) {
+                    params.width = widthPx
+                    view.layoutParams = params
+                }
+            }
+            FolderViewHolder(view)
         } else {
             ImageViewHolder(inflater.inflate(R.layout.item_image, parent, false))
         }

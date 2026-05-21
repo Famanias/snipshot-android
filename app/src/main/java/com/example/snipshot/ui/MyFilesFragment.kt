@@ -23,18 +23,27 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kotlinx.coroutines.launch
 
 class MyFilesFragment : Fragment() {
-    private lateinit var recyclerView: RecyclerView
+    private lateinit var scrollView: View
+    private lateinit var rvFolders: RecyclerView
+    private lateinit var rvImages: RecyclerView
+    private lateinit var foldersSection: View
+    private lateinit var btnViewAllFolders: Button
     private lateinit var fabNewFolder: FloatingActionButton
     private lateinit var emptyState: LinearLayout
     private lateinit var offlineBanner: LinearLayout
     private lateinit var btnLogin: Button
 
-    private lateinit var adapter: FileItemAdapter
+    private lateinit var foldersAdapter: FileItemAdapter
+    private lateinit var imagesAdapter: FileItemAdapter
     private var wasLoggedIn: Boolean = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = inflater.inflate(R.layout.fragment_my_files, container, false)
-        recyclerView = view.findViewById(R.id.recycler_view)
+        scrollView = view.findViewById(R.id.scroll_view)
+        rvFolders = view.findViewById(R.id.rv_folders)
+        rvImages = view.findViewById(R.id.rv_images)
+        foldersSection = view.findViewById(R.id.folders_section)
+        btnViewAllFolders = view.findViewById(R.id.btn_view_all_folders)
         fabNewFolder = view.findViewById(R.id.fab_new_folder)
         emptyState = view.findViewById(R.id.empty_state)
         offlineBanner = view.findViewById(R.id.offline_banner)
@@ -45,7 +54,9 @@ class MyFilesFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        adapter = FileItemAdapter(emptyList(),
+        foldersAdapter = FileItemAdapter(
+            items = emptyList(),
+            isHorizontal = true,
             onFolderClick = { folder ->
                 val fragment = FolderDetailFragment.newInstance(folder.id, folder.name)
                 parentFragmentManager.beginTransaction()
@@ -53,6 +64,18 @@ class MyFilesFragment : Fragment() {
                     .addToBackStack(null)
                     .commit()
             },
+            onImageClick = { _ -> },
+            onFolderLongClick = { folder, anchorView ->
+                showFolderContextMenu(folder, anchorView)
+            },
+            onImageLongClick = { _, _ -> }
+        )
+        rvFolders.adapter = foldersAdapter
+
+        imagesAdapter = FileItemAdapter(
+            items = emptyList(),
+            isHorizontal = false,
+            onFolderClick = { _ -> },
             onImageClick = { item ->
                 val intent = android.content.Intent(context, com.example.snipshot.ImageDetailActivity::class.java)
                 when (item) {
@@ -71,18 +94,24 @@ class MyFilesFragment : Fragment() {
                 }
                 startActivity(intent)
             },
-            onFolderLongClick = { folder, anchorView ->
-                showFolderContextMenu(folder, anchorView)
-            },
+            onFolderLongClick = { _, _ -> },
             onImageLongClick = { item, anchorView ->
                 showImageContextMenu(item, anchorView)
             }
         )
-        recyclerView.layoutManager = GridLayoutManager(context, 2)
-        recyclerView.adapter = adapter
+        rvImages.layoutManager = GridLayoutManager(context, 2)
+        rvImages.adapter = imagesAdapter
 
         btnLogin.setOnClickListener {
             startActivity(Intent(requireContext(), LoginActivity::class.java))
+        }
+
+        btnViewAllFolders.setOnClickListener {
+            val fragment = AllFoldersFragment()
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.fragment_container, fragment)
+                .addToBackStack(null)
+                .commit()
         }
 
         fabNewFolder.setOnClickListener {
@@ -238,17 +267,16 @@ class MyFilesFragment : Fragment() {
         popup.show()
     }
 
-    // ── Data loading ──────────────────────────────────────────────────────────
-
     private fun showEmptyState(empty: Boolean) {
         emptyState.visibility = if (empty) View.VISIBLE else View.GONE
-        recyclerView.visibility = if (empty) View.GONE else View.VISIBLE
+        scrollView.visibility = if (empty) View.GONE else View.VISIBLE
     }
 
     private fun loadLocalFiles() {
         val files = StorageManager.getLocalFiles(requireContext())
         val items = files.map { FileItem.LocalImage(it) }
-        adapter.updateData(items)
+        imagesAdapter.updateData(items)
+        foldersSection.visibility = View.GONE
         showEmptyState(items.isEmpty())
     }
 
@@ -256,14 +284,15 @@ class MyFilesFragment : Fragment() {
         lifecycleScope.launch {
             val foldersResult = ApiClient.getFolders()
             val imagesResult = ApiClient.getImages(folderId = null)
-            val items = mutableListOf<FileItem>()
+            val folderItems = mutableListOf<FileItem.Folder>()
+            val imageItems = mutableListOf<FileItem.CloudImage>()
 
             if (foldersResult.isSuccess) {
                 val array = foldersResult.getOrNull()?.optJSONArray("folders")
                 if (array != null) {
                     for (i in 0 until array.length()) {
                         val obj = array.getJSONObject(i)
-                        items.add(FileItem.Folder(obj.getInt("id"), obj.getString("name")))
+                        folderItems.add(FileItem.Folder(obj.getInt("id"), obj.getString("name")))
                     }
                 }
             }
@@ -273,13 +302,20 @@ class MyFilesFragment : Fragment() {
                 if (array != null) {
                     for (i in 0 until array.length()) {
                         val obj = array.getJSONObject(i)
-                        items.add(FileItem.CloudImage(obj.getInt("id"), obj.getString("filename"), obj.getString("public_url")))
+                        imageItems.add(FileItem.CloudImage(obj.getInt("id"), obj.getString("filename"), obj.getString("public_url")))
                     }
                 }
             }
 
-            adapter.updateData(items)
-            showEmptyState(items.isEmpty())
+            if (folderItems.isNotEmpty()) {
+                foldersSection.visibility = View.VISIBLE
+                foldersAdapter.updateData(folderItems.take(4))
+            } else {
+                foldersSection.visibility = View.GONE
+            }
+
+            imagesAdapter.updateData(imageItems)
+            showEmptyState(folderItems.isEmpty() && imageItems.isEmpty())
         }
     }
 }

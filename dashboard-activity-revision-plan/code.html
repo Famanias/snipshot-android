@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SnipShot - My Files</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700&amp;family=Hanken+Grotesk:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .fill-icon {
+            font-variation-settings: 'FILL' 1;
+        }
+        /* Custom scrollbar for horizontal folders */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-fixed": "#260059",
+                        "on-surface-variant": "#4a4551",
+                        "secondary-container": "#e7dff6",
+                        "error-container": "#ffdad6",
+                        "surface-container": "#edeef0",
+                        "primary-container": "#7c5cb7",
+                        "on-tertiary": "#ffffff",
+                        "outline": "#7b7582",
+                        "secondary": "#615c6f",
+                        "on-error": "#ffffff",
+                        "primary-fixed": "#ebdcff",
+                        "background": "#f9f9fb",
+                        "tertiary-fixed-dim": "#d0bdf9",
+                        "error": "#ba1a1a",
+                        "inverse-primary": "#d4bbff",
+                        "surface-variant": "#e2e2e4",
+                        "on-secondary-fixed-variant": "#494456",
+                        "on-secondary-container": "#676275",
+                        "tertiary-container": "#75659a",
+                        "on-secondary-fixed": "#1d1929",
+                        "on-primary-container": "#f7edff",
+                        "surface-dim": "#d9dadc",
+                        "secondary-fixed-dim": "#cac3d9",
+                        "on-tertiary-container": "#f6eeff",
+                        "secondary-fixed": "#e7dff6",
+                        "surface": "#f9f9fb",
+                        "inverse-surface": "#2f3132",
+                        "on-surface": "#1a1c1d",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-fixed": "#211142",
+                        "primary": "#63439c",
+                        "on-primary-fixed-variant": "#54348d",
+                        "on-primary": "#ffffff",
+                        "surface-container-highest": "#e2e2e4",
+                        "on-background": "#1a1c1d",
+                        "surface-bright": "#f9f9fb",
+                        "tertiary-fixed": "#eaddff",
+                        "inverse-on-surface": "#f0f0f2",
+                        "surface-tint": "#6c4da7",
+                        "on-tertiary-fixed-variant": "#4d3e70",
+                        "surface-container-high": "#e8e8ea",
+                        "on-error-container": "#93000a",
+                        "on-secondary": "#ffffff",
+                        "outline-variant": "#ccc3d2",
+                        "primary-fixed-dim": "#d4bbff",
+                        "surface-container-low": "#f3f3f5",
+                        "tertiary": "#5c4d80"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-sm": "0.5rem",
+                        "gutter-grid": "1rem",
+                        "stack-md": "1rem",
+                        "margin-mobile": "1.25rem",
+                        "inset-card": "1rem"
+                    },
+                    "fontFamily": {
+                        "label-sm": ["Hanken Grotesk"],
+                        "display-sm": ["Manrope"],
+                        "body-md": ["Hanken Grotesk"],
+                        "metadata-code": ["Hanken Grotesk"],
+                        "label-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                        "display-sm": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "metadata-code": ["11px", {"lineHeight": "14px", "letterSpacing": "0.02em", "fontWeight": "400"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                        "headline-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="bg-primary shadow-md sticky top-0 z-50 flex justify-between items-center w-full px-5 py-4">
+<div class="flex items-center gap-4">
+<button class="text-on-primary hover:opacity-90 active:scale-95 transition-transform">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="flex items-center gap-2">
+<img alt="SnipShot Logo" class="h-8 w-8 object-contain rounded-lg" src="https://lh3.googleusercontent.com/aida/ADBb0ui-yzHneLgfa8cLlVqx8XwfFN2v2gx0uOWWXkQN2F8hOzPohrGeH7T7Y7fPA505epDGNARfo2ozJHH4wa31r196jNPvkFVnkFToDXFTJ_dYDieiciiShrGsRIhNYciUQHNlOYt7mULeo_IEl8mCJVMLioCSjvr-SjX71ZqMVfeXpmaZmzNKmaYJkU9rUO1dXECaOiMqmL_wrZ0-7-b3FbvLIGP1vgmqiZ1wCS0ZWHyMBAPLBb53qcV8qsY"/>
+<span class="font-display-sm text-display-sm font-bold text-on-primary">SnipShot</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="h-8 w-8 rounded-full overflow-hidden border border-on-primary/20">
+<img alt="User Profile" class="h-full w-full object-cover" data-alt="A professional headshot of a young creative professional with a friendly smile. The background is a soft, blurred studio setting with warm, neutral tones. The lighting is flattering and high-end, matching a clean, corporate modern aesthetic with a minimalist focus on clarity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvDvEAXOM3KnvVoy60Q0kDCwQ7BTvioD0tPd4FmaUxYlBZRYKUeyEHPW2DcTVa2FIJj4b6K0J7vIFxBOHdb0bGfsUf3j0kqvAzeyI0-jh2c0tCvR8sL1M8wesatjigVBN1XbDKdRyxEY-x8ZWaqQbylIpzK2eJLAT7xuIxKLt8odokDHwemPQY26f0xbIoVTAXoJnKMKY8C2giWjq05Y39vWt4w36mRpqPOme1Rm-sHQr2f5ajqTuzalc0MHDx_Qj-FB9465DoV6A"/>
+</div>
+</div>
+</header>
+<main class="py-6 space-y-8">
+<!-- Folders Section -->
+<section>
+<div class="flex justify-between items-center mb-4 px-5">
+<h2 class="font-headline-md text-headline-md text-on-surface">Folders</h2>
+<button class="text-primary font-label-lg text-label-lg">View All</button>
+</div>
+<div class="flex overflow-x-auto no-scrollbar gap-4 px-5 pb-2">
+<!-- Folder Card: dggds -->
+<div class="min-w-[140px] flex-shrink-0 bg-secondary-fixed p-5 rounded-xl flex flex-col items-center justify-center text-center space-y-3 border border-outline-variant/30 hover:bg-secondary-container transition-colors cursor-pointer">
+<div class="text-primary">
+<span class="material-symbols-outlined !text-4xl fill-icon">folder</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-secondary-fixed">dggds</h3>
+<p class="font-label-sm text-label-sm text-on-secondary-fixed-variant">12 items</p>
+</div>
+</div>
+<!-- Folder Card: testing1 -->
+<div class="min-w-[140px] flex-shrink-0 bg-secondary-fixed p-5 rounded-xl flex flex-col items-center justify-center text-center space-y-3 border border-outline-variant/30 hover:bg-secondary-container transition-colors cursor-pointer">
+<div class="text-primary">
+<span class="material-symbols-outlined !text-4xl fill-icon">folder</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-secondary-fixed">testing1</h3>
+<p class="font-label-sm text-label-sm text-on-secondary-fixed-variant">4 items</p>
+</div>
+</div>
+<!-- Folder Card: Work in Progress -->
+<div class="min-w-[140px] flex-shrink-0 bg-secondary-fixed p-5 rounded-xl flex flex-col items-center justify-center text-center space-y-3 border border-outline-variant/30 hover:bg-secondary-container transition-colors cursor-pointer">
+<div class="text-primary">
+<span class="material-symbols-outlined !text-4xl fill-icon">folder</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-secondary-fixed">Work in Progress</h3>
+<p class="font-label-sm text-label-sm text-on-secondary-fixed-variant">24 items</p>
+</div>
+</div>
+<!-- Folder Card: Completed -->
+<div class="min-w-[140px] flex-shrink-0 bg-secondary-fixed p-5 rounded-xl flex flex-col items-center justify-center text-center space-y-3 border border-outline-variant/30 hover:bg-secondary-container transition-colors cursor-pointer">
+<div class="text-primary">
+<span class="material-symbols-outlined !text-4xl fill-icon">folder</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-secondary-fixed">Completed</h3>
+<p class="font-label-sm text-label-sm text-on-secondary-fixed-variant">56 items</p>
+</div>
+</div>
+</div>
+</section>
+<!-- All Files Section -->
+<section class="px-5">
+<div class="flex justify-between items-center mb-4">
+<h2 class="font-headline-md text-headline-md text-on-surface">All Files</h2>
+<div class="flex gap-2">
+<button class="p-2 rounded-full hover:bg-surface-container text-on-surface-variant">
+<span class="material-symbols-outlined">grid_view</span>
+</button>
+<button class="p-2 rounded-full hover:bg-surface-container text-on-surface-variant">
+<span class="material-symbols-outlined">sort</span>
+</button>
+</div>
+</div>
+<!-- Bento-style Asymmetric Grid -->
+<div class="grid grid-cols-2 gap-4">
+<!-- File Item 1 -->
+<div class="group bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300">
+<div class="aspect-[3/4] relative overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A detailed black and white manga panel showing a dramatic close-up of a character's intense expression. The ink work is crisp with sharp lines and intricate screentone textures. The composition is dynamic and focuses on high-contrast storytelling typical of professional manhwa art." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBj6l9xwwinqIeR9g9soJOzX5rQcrhJ39FyUsKx4Ukgwz079ayACMv8K2hhgfU87RU8hSQS6jbNRPp0UWjBieIEYoBgKWBzn71H5IM7MjyzlJSINnZ5Bn71sNjW8pGpYaWFk2GnKmifxadHYZoRbSWQBS6bRAMicyLAlZIAfUd_yvmDUBVw6qr96gi2bRT1JZQF-DlqfBJpOqPrNozjZR5ldwd5ypL88I89w72j5rEzjh1UIAtThgAwZwhe0vTFYezVSt6C9K4Ovjs"/>
+<div class="absolute top-2 right-2">
+<span class="bg-primary/90 text-on-primary px-2 py-1 rounded-full font-label-sm text-[10px]">TRANSLATED</span>
+</div>
+</div>
+<div class="p-3 space-y-1">
+<p class="font-label-sm text-label-sm text-on-surface truncate">translated_1779170250.png</p>
+<p class="font-metadata-code text-metadata-code text-on-surface-variant">Today, 2:45 PM</p>
+</div>
+</div>
+<!-- File Item 2 -->
+<div class="group bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300">
+<div class="aspect-[3/4] relative overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A modern digital illustration of a city street in a minimalist anime style. The colors are muted with a focus on lavender and cool gray tones. The linework is delicate and clean, suggesting a calm, urban atmosphere within a high-density creative workflow environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAq1_EqLfL3LnvLmzK6uzhi60onM1PAZReGRk_-H08bAsguWNWq1_w27xCBmI37Zl2n2IAYPQyhiUw98AH-Hzekuxto5chsU6Z_Z-Y94aAgV4VZETmqOKMjO_P8yZxLG3qZ0G8Ae7-nP4gbw-rpcekaBpftqHFwd9JdWOPqTFqVqqQ9fF30DrrT6Y0By7bFhI-G8oHRH_n8HU1C_iGx882Sncd3BufvLVDWmI4VBgvXmPf6xuVAEmK-Zo0I7lGdTczLmG8Dz4whfc4"/>
+<div class="absolute top-2 right-2">
+<span class="bg-secondary/90 text-on-secondary px-2 py-1 rounded-full font-label-sm text-[10px]">ORIGINAL</span>
+</div>
+</div>
+<div class="p-3 space-y-1">
+<p class="font-label-sm text-label-sm text-on-surface truncate">translated_1773846842.png</p>
+<p class="font-metadata-code text-metadata-code text-on-surface-variant">Today, 1:12 PM</p>
+</div>
+</div>
+<!-- File Item 3 -->
+<div class="group bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300">
+<div class="aspect-[3/4] relative overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A clean, structured layout of manga panels arranged on a white canvas. Each panel shows different perspectives of a character in dialogue. The design emphasizes professional scanlation workflows with clear borders and organized spatial distribution for readability." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCeFCUy1xtcFvIXlbkIHS9hW8ll3b9ZtFXfkH8p6TEVtUU8eUA3wsLd1XuWN5dz05l_JlpGGOQpE6aoM76taCpn_ObhuQRp6YZiPVBlm1woSpr6CTb9KZDulkc2X1pZm09IzB38ScRC979a9tlSCwCSIqm9u2GYRn70OKNJqxHkGDLg9-agZFGkrQyj1cFjMKZjtDUzSddTnpvWEEQAFSvhT1INQEAdfasEqKelW7ADZTwa4Mgd0AWuLcqk_8TMt0OOaS9zi5SZhpQ"/>
+</div>
+<div class="p-3 space-y-1">
+<p class="font-label-sm text-label-sm text-on-surface truncate">translated_1773845501.png</p>
+<p class="font-metadata-code text-metadata-code text-on-surface-variant">Yesterday, 11:30 PM</p>
+</div>
+</div>
+<!-- File Item 4 -->
+<div class="group bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300">
+<div class="aspect-[3/4] relative overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A stylized digital drawing focusing on the texture of old book pages and ink sketches. The lighting is soft and focused, creating a sense of creative history and scholarly pursuit. The aesthetic is sophisticated and minimalist, aligning with a corporate modern design system." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBW4guTm8NBbp0GKoPX6iUFSbz-2hosgKs7uW-iTPaE00tolPMDFg-kiiLr0HkDzT5t1T4Y6Ng8unnYU_I8XylC5STHA6YLXPrJNTzFbKK3i_M-EoEWOcfNWvM9HPBxkvOCsXLcKPBbxF6eYEycDhkljoPSwixA8IVIDmgvWTtvV83C53nwwF3iFLHqOvJH3f4rOM2jS9KiAArY4C2Vl_ZzZ5cZouPLDBfUJotzFNRk6JhpXcvRPHNUOZ6e6Pb6ZoorRg7AMdvjZjk"/>
+<div class="absolute top-2 right-2">
+<span class="bg-primary/90 text-on-primary px-2 py-1 rounded-full font-label-sm text-[10px]">EDITED</span>
+</div>
+</div>
+<div class="p-3 space-y-1">
+<p class="font-label-sm text-label-sm text-on-surface truncate">translated_1773844813.png</p>
+<p class="font-metadata-code text-metadata-code text-on-surface-variant">Oct 24, 2023</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-24 right-6 bg-primary text-on-primary w-14 h-14 rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-transform z-40 hover:opacity-95">
+<span class="material-symbols-outlined !text-3xl">add</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-4 pt-2 bg-surface border-t border-outline-variant shadow-lg">
+<!-- My Files (Active) -->
+<a class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-full px-6 py-1 active:scale-90 duration-200 transition-colors" href="#">
+<span class="material-symbols-outlined fill-icon">folder</span>
+<span class="font-label-sm text-label-sm">My Files</span>
+</a>
+<!-- Recent (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-6 py-1 hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-label-sm text-label-sm">Recent</span>
+</a>
+<!-- Settings (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-6 py-1 hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-sm text-label-sm">Settings</span>
+</a>
+</nav>
+<script>
+    // Simple ripple-like effect for folder cards
+    document.querySelectorAll('.cursor-pointer').forEach(card => {
+        card.addEventListener('click', function() {
+            this.classList.add('scale-[0.98]');
+            setTimeout(() => this.classList.remove('scale-[0.98]'), 100);
+        });
+    });
+</script>
+</body></html>
