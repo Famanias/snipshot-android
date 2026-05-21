@@ -191,7 +191,7 @@ class SnipOverlayActivity : Activity() {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
                 val imageBytes = byteArrayOutputStream.toByteArray()
 
-                val backendUrl = BuildConfig.BACKEND_URL
+                val backendUrl = BuildConfig.TRANSLATOR_URL
                 val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
                 val targetLanguage = prefs.getString("target_language", "en") ?: "en"
                 
@@ -264,7 +264,7 @@ class SnipOverlayActivity : Activity() {
                 Log.d("SnipOverlayActivity", "Sending OCR request with image size: ${imageBytes.size} bytes")
 
                 // Get backend URL from BuildConfig
-                val backendUrl = BuildConfig.BACKEND_URL
+                val backendUrl = BuildConfig.SIMPLE_TRANSLATOR_URL
 
                 // Perform OCR
                 val ocrRequestBody = JSONObject().put("image_base64", base64Image).toString()

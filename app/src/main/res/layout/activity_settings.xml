@@ -2,9 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp"
-    android:gravity="center">
+    android:orientation="vertical">
 
     <ScrollView
         android:layout_width="match_parent"
@@ -14,15 +12,51 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:padding="16dp">
 
+            <!-- ── Account Section ───────────────────────────────────── -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Account"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tv_account_email"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnSurface"
+                android:alpha="0.7"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btn_logout"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:text="Log Out"
+                android:visibility="gone"
+                android:layout_marginBottom="24dp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="?attr/colorOutline"
+                android:alpha="0.3"
+                android:layout_marginBottom="20dp" />
+
+            <!-- ── Translation Mode ──────────────────────────────────── -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Translation Mode"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:layout_marginBottom="8dp"/>
+                android:layout_marginBottom="8dp" />
 
             <RadioGroup
                 android:id="@+id/mode_radio_group"
@@ -34,29 +68,31 @@
                     android:id="@+id/rb_mode_1"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Mode 1: Manga Translator (Advanced)"/>
+                    android:text="Mode 1: Manga Translator (Advanced)" />
 
                 <RadioButton
                     android:id="@+id/rb_mode_2"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Mode 2: Simple OCR (Fast)"/>
+                    android:text="Mode 2: Simple OCR (Fast)" />
             </RadioGroup>
 
+            <!-- ── Target Language ───────────────────────────────────── -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/select_translation_language"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:layout_marginBottom="8dp"/>
+                android:layout_marginBottom="8dp" />
 
             <Spinner
                 android:id="@+id/language_spinner"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"/>
+                android:layout_marginBottom="24dp" />
 
+            <!-- ── Advanced Parameters (Mode 1 only) ─────────────────── -->
             <LinearLayout
                 android:id="@+id/advanced_settings_layout"
                 android:layout_width="match_parent"
@@ -70,7 +106,7 @@
                     android:text="Advanced Parameters (Mode 1)"
                     android:textSize="18sp"
                     android:textStyle="bold"
-                    android:layout_marginBottom="8dp"/>
+                    android:layout_marginBottom="8dp" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -104,22 +140,19 @@
                     android:layout_height="wrap_content"
                     android:inputType="numberDecimal"
                     android:text="0.5" />
+
             </LinearLayout>
+
         </LinearLayout>
     </ScrollView>
 
-    <Button
-        android:id="@+id/save_button"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/save_settings"
-        android:layout_marginBottom="8dp"/>
-
+    <!-- ── Back button pinned at bottom ──────────────────────────────── -->
     <Button
         android:id="@+id/back_button"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_margin="16dp"
         style="?attr/materialButtonOutlinedStyle"
-        android:text="@string/back"/>
+        android:text="@string/back" />
 
 </LinearLayout>

@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
@@ -15,17 +16,20 @@ import kotlinx.coroutines.launch
 
 class RecentFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
+    private lateinit var emptyState: LinearLayout
     private lateinit var adapter: FileItemAdapter
+    private var wasLoggedIn: Boolean = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = inflater.inflate(R.layout.fragment_recent, container, false)
         recyclerView = view.findViewById(R.id.recycler_view)
+        emptyState = view.findViewById(R.id.empty_state)
         return view
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        
+
         adapter = FileItemAdapter(emptyList(),
             onFolderClick = { },
             onImageClick = { item ->
@@ -54,6 +58,20 @@ class RecentFragment : Fragment() {
         recyclerView.layoutManager = GridLayoutManager(context, 2)
         recyclerView.adapter = adapter
 
+        wasLoggedIn = ApiClient.isLoggedIn()
+        loadData()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val isLoggedIn = ApiClient.isLoggedIn()
+        if (isLoggedIn != wasLoggedIn) {
+            wasLoggedIn = isLoggedIn
+            loadData()
+        }
+    }
+
+    private fun loadData() {
         if (ApiClient.isLoggedIn()) {
             loadCloudRecent()
         } else {
@@ -61,10 +79,16 @@ class RecentFragment : Fragment() {
         }
     }
 
+    private fun showEmptyState(empty: Boolean) {
+        emptyState.visibility = if (empty) View.VISIBLE else View.GONE
+        recyclerView.visibility = if (empty) View.GONE else View.VISIBLE
+    }
+
     private fun loadLocalRecent() {
         val files = StorageManager.getLocalFiles(requireContext())
         val items = files.map { FileItem.LocalImage(it) }
         adapter.updateData(items)
+        showEmptyState(items.isEmpty())
     }
 
     private fun loadCloudRecent() {
@@ -80,6 +104,9 @@ class RecentFragment : Fragment() {
                     }
                 }
                 adapter.updateData(items)
+                showEmptyState(items.isEmpty())
+            } else {
+                showEmptyState(true)
             }
         }
     }

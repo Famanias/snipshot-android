@@ -17,11 +17,20 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val BACKEND_URL: String by dotenv
-        buildConfigField("String", "BACKEND_URL", "\"$BACKEND_URL\"")
+        val TRANSLATOR_URL: String by dotenv
+        buildConfigField("String", "TRANSLATOR_URL", "\"$TRANSLATOR_URL\"")
 
-        val DATABASE_API_URL: String by dotenv
-        buildConfigField("String", "DATABASE_API_URL", "\"$DATABASE_API_URL\"")
+        val SIMPLE_TRANSLATOR_URL: String by dotenv
+        buildConfigField("String", "SIMPLE_TRANSLATOR_URL", "\"$SIMPLE_TRANSLATOR_URL\"")
+
+        val SUPABASE_URL: String by dotenv
+        buildConfigField("String", "SUPABASE_URL", "\"$SUPABASE_URL\"")
+
+        val SUPABASE_ANON_KEY: String by dotenv
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$SUPABASE_ANON_KEY\"")
+
+        val SUPABASE_STORAGE_BUCKET: String by dotenv
+        buildConfigField("String", "SUPABASE_STORAGE_BUCKET", "\"$SUPABASE_STORAGE_BUCKET\"")
     }
 
     buildTypes {
