@@ -39,6 +39,12 @@ class MangaResultActivity : AppCompatActivity() {
         }
 
         resultBitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+        if (resultBitmap == null) {
+            Log.e("MangaResultActivity", "Failed to decode translated image bytes")
+            Toast.makeText(this, "Failed to load translated image", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
         resultImage.setImageBitmap(resultBitmap)
 
         btnSave.setOnClickListener {

@@ -61,24 +61,27 @@
         <activity
             android:name=".MangaResultActivity"
             android:exported="false"
+            android:taskAffinity=""
             android:theme="@style/Theme.SnipShot" />
 
         <activity
             android:name=".SnipActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
             android:excludeFromRecents="true"
+            android:taskAffinity=""
             android:exported="true" />
 
         <activity
             android:name=".SnipOverlayActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
             android:excludeFromRecents="true"
+            android:taskAffinity=""
             android:noHistory="true" />
 
         <activity android:name=".HelpActivity" />
         <activity android:name=".SettingsActivity" android:theme="@style/Theme.SnipShot" />
-        <activity android:name=".TranslateActivity" />
-        <activity android:name=".OverlayActivity"/>
+        <activity android:name=".TranslateActivity" android:taskAffinity="" />
+        <activity android:name=".OverlayActivity" android:taskAffinity="" />
 
         <service android:name=".BubbleService"
             android:exported="false"

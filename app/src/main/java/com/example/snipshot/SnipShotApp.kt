@@ -6,14 +6,23 @@ import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import com.example.snipshot.api.ApiClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 class SnipShotApp : Application(), Application.ActivityLifecycleCallbacks {
+    
+    companion object {
+        lateinit var applicationScope: CoroutineScope
+            private set
+    }
     
     private var activityReferences = 0
     private var isActivityChangingConfigurations = false
 
     override fun onCreate() {
         super.onCreate()
+        applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         ApiClient.init(this)
         registerActivityLifecycleCallbacks(this)
     }

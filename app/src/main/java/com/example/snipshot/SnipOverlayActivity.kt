@@ -29,6 +29,9 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.text.SimpleDateFormat
+import com.example.snipshot.utils.StorageManager
+import com.example.snipshot.api.ApiClient
+import com.example.snipshot.SnipShotApp
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -237,8 +240,48 @@ class SnipOverlayActivity : Activity() {
 
                 val responseBytes = response.body?.bytes() ?: throw Exception("Empty response body")
                 
-                val intent = Intent(this@SnipOverlayActivity, MangaResultActivity::class.java).apply {
-                    putExtra("image_bytes", responseBytes)
+                val decodedBitmap = BitmapFactory.decodeByteArray(responseBytes, 0, responseBytes.size)
+                    ?: throw Exception("Failed to decode translated image bytes")
+
+                val uniquePrefix = "Snip_${java.util.UUID.randomUUID().toString().take(8)}"
+                val localFile = StorageManager.saveLocally(this@SnipOverlayActivity, decodedBitmap, uniquePrefix)
+                    ?: throw Exception("Failed to save translated image locally")
+
+                if (ApiClient.isLoggedIn()) {
+                    val fileBytes = responseBytes
+                    val filename = localFile.name
+                    SnipShotApp.applicationScope.launch(Dispatchers.IO) {
+                        val uploadResult = ApiClient.uploadImage(
+                            imageBytes = fileBytes,
+                            filename = filename,
+                            sourceLang = null,
+                            targetLang = targetLanguage
+                        )
+                        if (uploadResult.isSuccess) {
+                            // Check if local file was deleted by the user while the upload was in progress (TOCTOU gap)
+                            if (!localFile.exists()) {
+                                val uploadedObj = uploadResult.getOrNull()
+                                val id = uploadedObj?.optInt("id", -1) ?: -1
+                                if (id != -1) {
+                                    ApiClient.deleteImage(id)
+                                }
+                            }
+                        } else {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(
+                                    this@SnipOverlayActivity,
+                                    "Failed to sync with cloud: ${uploadResult.exceptionOrNull()?.message}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                }
+
+                val intent = Intent(this@SnipOverlayActivity, ImageDetailActivity::class.java).apply {
+                    putExtra("is_local", true)
+                    putExtra("path_or_url", localFile.absolutePath)
+                    putExtra("filename", localFile.name)
                 }
                 startActivity(intent)
                 finish()

@@ -7,6 +7,10 @@ import androidx.security.crypto.MasterKey
 import com.example.snipshot.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import com.example.snipshot.model.UploadEvent
 import okhttp3.*
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -40,6 +44,9 @@ object ApiClient {
     private val supabaseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
     private val anonKey = BuildConfig.SUPABASE_ANON_KEY
     private val storageBucket = BuildConfig.SUPABASE_STORAGE_BUCKET
+
+    private val _uploadFlow = MutableSharedFlow<UploadEvent>(extraBufferCapacity = 10)
+    val uploadFlow: SharedFlow<UploadEvent> = _uploadFlow.asSharedFlow()
 
     private lateinit var prefs: SharedPreferences
 
@@ -222,11 +229,11 @@ object ApiClient {
         filename: String,
         folderId: Int? = null,
         sourceLang: String? = null,
-        targetLang: String? = null
+        targetLang: String? = null,
+        timestamp: Long = System.currentTimeMillis()
     ): Result<JSONObject> = withContext(Dispatchers.IO) {
         try {
             val userId = user?.optString("id") ?: return@withContext Result.failure(Exception("Not logged in"))
-            val timestamp = System.currentTimeMillis()
             val storagePath = "$userId/${timestamp}_$filename"
 
             // 1. Upload binary to Supabase Storage
@@ -244,6 +251,7 @@ object ApiClient {
             val uploadResponse = client.newCall(uploadRequest).execute()
             if (!uploadResponse.isSuccessful) {
                 val err = uploadResponse.body?.string() ?: "Storage upload failed"
+                _uploadFlow.emit(UploadEvent.Failure(filename, err))
                 return@withContext Result.failure(Exception(err))
             }
             uploadResponse.body?.close()
@@ -272,12 +280,21 @@ object ApiClient {
                 val str = response.body?.string() ?: "[]"
                 if (response.isSuccessful || response.code == 201) {
                     val arr = JSONArray(str)
-                    Result.success(if (arr.length() > 0) arr.getJSONObject(0) else JSONObject())
+                    val resultObj = if (arr.length() > 0) arr.getJSONObject(0) else JSONObject()
+                    if (resultObj.has("id")) {
+                        val id = resultObj.optInt("id", -1)
+                        val url = resultObj.optString("public_url", "")
+                        _uploadFlow.emit(UploadEvent.Success(filename, id, url))
+                    }
+                    Result.success(resultObj)
                 } else {
-                    Result.failure(Exception("Metadata insert failed: $str"))
+                    val errMsg = "Metadata insert failed: $str"
+                    _uploadFlow.emit(UploadEvent.Failure(filename, errMsg))
+                    Result.failure(Exception(errMsg))
                 }
             }
         } catch (e: Exception) {
+            _uploadFlow.emit(UploadEvent.Failure(filename, e.message ?: "Unknown error"))
             Result.failure(e)
         }
     }
