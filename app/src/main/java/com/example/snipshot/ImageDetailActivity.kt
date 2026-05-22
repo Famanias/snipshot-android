@@ -45,6 +45,7 @@ class ImageDetailActivity : AppCompatActivity() {
         val tvFilename = findViewById<TextView>(R.id.tv_filename)
         val btnDelete = findViewById<ImageButton>(R.id.btn_delete)
         val btnOpenBrowser = findViewById<ImageButton>(R.id.btn_open_browser)
+        val btnSaveToAccount = findViewById<ImageButton>(R.id.btn_save_to_account)
 
         var isLocal = intent.getBooleanExtra("is_local", false)
         var imageId = intent.getIntExtra("image_id", -1)
@@ -52,7 +53,12 @@ class ImageDetailActivity : AppCompatActivity() {
         var pathOrUrl = intent.getStringExtra("path_or_url")
         val localFilePath: String? = if (isLocal) pathOrUrl else null
 
+        var previewImageId: Int = -1
+        var previewPublicUrl: String? = null
+
         tvFilename.text = filename
+
+        btnSaveToAccount.visibility = if (isLocal) View.VISIBLE else View.GONE
 
         if (isLocal) {
             btnOpenBrowser.visibility = View.GONE
@@ -78,18 +84,93 @@ class ImageDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 ApiClient.uploadFlow.collect { event ->
-                    if (event is UploadEvent.Success && event.filename == filename) {
+                    if (event is UploadEvent.Success && event.filename == "[PREVIEW]_" + filename) {
+                        previewImageId = event.imageId
+                        previewPublicUrl = event.publicUrl
+                        if (isLocal) {
+                            btnOpenBrowser.visibility = View.VISIBLE
+                            btnOpenBrowser.setOnClickListener {
+                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(event.publicUrl))
+                                startActivity(browserIntent)
+                            }
+                        } else {
+                            // If we already saved permanently, delete the preview immediately
+                            SnipShotApp.applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                ApiClient.deleteImage(event.imageId)
+                            }
+                        }
+                    } else if (event is UploadEvent.Failure && event.filename == "[PREVIEW]_" + filename) {
+                        if (isLocal) {
+                            Toast.makeText(this@ImageDetailActivity, "Cloud sync failed: ${event.error}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+        }
+
+        btnSaveToAccount.setOnClickListener {
+            if (!ApiClient.isLoggedIn()) {
+                Toast.makeText(this, "Please log in to save to your account", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this, LoginActivity::class.java))
+                return@setOnClickListener
+            }
+
+            btnSaveToAccount.isEnabled = false
+            val file = File(localFilePath ?: "")
+            if (!file.exists()) {
+                Toast.makeText(this, "Local file not found", Toast.LENGTH_SHORT).show()
+                btnSaveToAccount.isEnabled = true
+                return@setOnClickListener
+            }
+
+            lifecycleScope.launch {
+                val fileBytes = try {
+                    file.readBytes()
+                } catch (e: Exception) {
+                    Toast.makeText(this@ImageDetailActivity, "Failed to read file: ${e.message}", Toast.LENGTH_SHORT).show()
+                    btnSaveToAccount.isEnabled = true
+                    return@launch
+                }
+
+                val uploadResult = ApiClient.uploadImage(
+                    imageBytes = fileBytes,
+                    filename = filename,
+                    sourceLang = null,
+                    targetLang = null
+                )
+
+                if (uploadResult.isSuccess) {
+                    val uploadedObj = uploadResult.getOrNull()
+                    val newImageId = uploadedObj?.optInt("id", -1) ?: -1
+                    val newPublicUrl = uploadedObj?.optString("public_url")
+
+                    if (newImageId != -1 && newPublicUrl != null) {
                         isLocal = false
-                        imageId = event.imageId
-                        pathOrUrl = event.publicUrl
+                        imageId = newImageId
+                        pathOrUrl = newPublicUrl
+
+                        btnSaveToAccount.visibility = View.GONE
                         btnOpenBrowser.visibility = View.VISIBLE
                         btnOpenBrowser.setOnClickListener {
-                            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(event.publicUrl))
+                            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(newPublicUrl))
                             startActivity(browserIntent)
                         }
-                    } else if (event is UploadEvent.Failure && event.filename == filename) {
-                        Toast.makeText(this@ImageDetailActivity, "Cloud sync failed: ${event.error}", Toast.LENGTH_LONG).show()
+
+                        Toast.makeText(this@ImageDetailActivity, "Saved to account!", Toast.LENGTH_SHORT).show()
+
+                        if (previewImageId != -1) {
+                            SnipShotApp.applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                ApiClient.deleteImage(previewImageId)
+                            }
+                        }
+                    } else {
+                        Toast.makeText(this@ImageDetailActivity, "Upload succeeded but failed to parse response", Toast.LENGTH_LONG).show()
+                        btnSaveToAccount.isEnabled = true
                     }
+                } else {
+                    val errMsg = uploadResult.exceptionOrNull()?.message ?: "Unknown error"
+                    Toast.makeText(this@ImageDetailActivity, "Failed to save: $errMsg", Toast.LENGTH_LONG).show()
+                    btnSaveToAccount.isEnabled = true
                 }
             }
         }
@@ -98,6 +179,11 @@ class ImageDetailActivity : AppCompatActivity() {
             if (isLocal) {
                 val file = File(pathOrUrl ?: "")
                 if (file.delete()) {
+                    if (previewImageId != -1) {
+                        SnipShotApp.applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            ApiClient.deleteImage(previewImageId)
+                        }
+                    }
                     Toast.makeText(this, "Deleted locally", Toast.LENGTH_SHORT).show()
                     finish()
                 } else {

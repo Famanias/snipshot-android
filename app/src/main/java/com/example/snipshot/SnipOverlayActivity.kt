@@ -249,7 +249,7 @@ class SnipOverlayActivity : Activity() {
 
                 if (ApiClient.isLoggedIn()) {
                     val fileBytes = responseBytes
-                    val filename = localFile.name
+                    val filename = "[PREVIEW]_" + localFile.name
                     SnipShotApp.applicationScope.launch(Dispatchers.IO) {
                         val uploadResult = ApiClient.uploadImage(
                             imageBytes = fileBytes,

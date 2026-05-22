@@ -68,7 +68,10 @@ class FolderDetailFragment : Fragment() {
                 if (array != null) {
                     for (i in 0 until array.length()) {
                         val obj = array.getJSONObject(i)
-                        items.add(FileItem.CloudImage(obj.getInt("id"), obj.getString("filename"), obj.getString("public_url")))
+                        val fname = obj.getString("filename")
+                        if (!fname.startsWith("[PREVIEW]_")) {
+                            items.add(FileItem.CloudImage(obj.getInt("id"), fname, obj.getString("public_url")))
+                        }
                     }
                 }
                 adapter.updateData(items)

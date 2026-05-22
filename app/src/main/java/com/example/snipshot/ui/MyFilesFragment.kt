@@ -302,7 +302,10 @@ class MyFilesFragment : Fragment() {
                 if (array != null) {
                     for (i in 0 until array.length()) {
                         val obj = array.getJSONObject(i)
-                        imageItems.add(FileItem.CloudImage(obj.getInt("id"), obj.getString("filename"), obj.getString("public_url")))
+                        val fname = obj.getString("filename")
+                        if (!fname.startsWith("[PREVIEW]_")) {
+                            imageItems.add(FileItem.CloudImage(obj.getInt("id"), fname, obj.getString("public_url")))
+                        }
                     }
                 }
             }
