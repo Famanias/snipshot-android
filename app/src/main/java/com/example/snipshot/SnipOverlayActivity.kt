@@ -190,10 +190,6 @@ class SnipOverlayActivity : Activity() {
         CoroutineScope(Dispatchers.Main).launch {
             progressBar.visibility = View.VISIBLE
             try {
-                val byteArrayOutputStream = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
-                val imageBytes = byteArrayOutputStream.toByteArray()
-
                 val backendUrl = BuildConfig.TRANSLATOR_URL
                 val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
                 val targetLanguage = prefs.getString("target_language", "en") ?: "en"
@@ -221,18 +217,49 @@ class SnipOverlayActivity : Activity() {
                     })
                 }
 
-                val requestBody = okhttp3.MultipartBody.Builder()
-                    .setType(okhttp3.MultipartBody.FORM)
-                    .addFormDataPart("image", "snip.png", imageBytes.toRequestBody("image/png".toMediaType()))
-                    .addFormDataPart("config", configJson.toString())
-                    .build()
+                // 1. Helper to build a fresh RequestBody on demand
+                fun buildRequestBody(): okhttp3.RequestBody {
+                    val stream = ByteArrayOutputStream()
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                    val imageBytes = stream.toByteArray()
+                    return okhttp3.MultipartBody.Builder()
+                        .setType(okhttp3.MultipartBody.FORM)
+                        .addFormDataPart("image", "snip.png", imageBytes.toRequestBody("image/png".toMediaType()))
+                        .addFormDataPart("config", configJson.toString())
+                        .build()
+                }
 
-                val request = Request.Builder()
-                    .url("$backendUrl/translate/raw")
-                    .post(requestBody)
-                    .build()
+                // 2. Helper to build a request with a fresh body and the current token
+                fun buildRequest(): Request {
+                    val builder = Request.Builder()
+                        .url("$backendUrl/translate/raw")
+                        .post(buildRequestBody())   // fresh body every time
+                    ApiClient.accessToken?.let { token ->
+                        builder.addHeader("Authorization", "Bearer $token")
+                    }
+                    return builder.build()
+                }
 
-                val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
+                // 3. First attempt
+                var response = withContext(Dispatchers.IO) { client.newCall(buildRequest()).execute() }
+
+                // 4. On 401, refresh session and retry once
+                if (response.code == 401) {
+                    val refreshResult = ApiClient.refreshSession()
+                    val newAccessToken = refreshResult.getOrNull()?.optString("access_token")
+                    if (!newAccessToken.isNullOrEmpty()) {
+                        ApiClient.accessToken = newAccessToken
+                        response = withContext(Dispatchers.IO) {
+                            client.newCall(buildRequest()).execute()
+                        }
+                    }
+
+                    // 5. If retry also fails, redirect to login
+                    if (!response.isSuccessful) {
+                        navigateToLogin()
+                        return@launch
+                    }
+                }
                 
                 if (!response.isSuccessful) {
                     throw Exception("Manga Translation failed: ${response.message}")
@@ -360,6 +387,14 @@ class SnipOverlayActivity : Activity() {
                 progressBar.visibility = View.GONE
             }
         }
+    }
+
+    private fun navigateToLogin() {
+        val intent = Intent(this, LoginActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        startActivity(intent)
+        finish()
     }
 
     override fun onDestroy() {

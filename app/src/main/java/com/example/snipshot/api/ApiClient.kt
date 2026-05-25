@@ -51,7 +51,6 @@ object ApiClient {
     private lateinit var prefs: SharedPreferences
 
     var accessToken: String? = null
-        private set
     var refreshToken: String? = null
         private set
     var user: JSONObject? = null
@@ -173,6 +172,37 @@ object ApiClient {
                 } else {
                     val msg = json.optString("error_description",
                         json.optString("msg", "Invalid email or password"))
+                    Result.failure(Exception(msg))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Refresh the session using the refresh token.
+     * POST {supabaseUrl}/auth/v1/token?grant_type=refresh_token
+     */
+    suspend fun refreshSession(): Result<JSONObject> = withContext(Dispatchers.IO) {
+        try {
+            val token = refreshToken ?: return@withContext Result.failure(Exception("No refresh token available"))
+            val body = JSONObject().put("refresh_token", token)
+                .toString().toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$supabaseUrl/auth/v1/token?grant_type=refresh_token")
+                .headers(authHeaders())
+                .post(body)
+                .build()
+            client.newCall(request).execute().use { response ->
+                val str = response.body?.string() ?: "{}"
+                val json = JSONObject(str)
+                if (response.isSuccessful) {
+                    saveSession(json)
+                    Result.success(json)
+                } else {
+                    val msg = json.optString("error_description",
+                        json.optString("msg", "Session refresh failed"))
                     Result.failure(Exception(msg))
                 }
             }
