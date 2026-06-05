@@ -20,6 +20,7 @@ android {
         val TRANSLATOR_URL = dotenv["TRANSLATOR_URL"]?.takeIf { it.isNotEmpty() } ?: "https://snipshot-snipshot-backend.hf.space"
         buildConfigField("String", "TRANSLATOR_URL", "\"$TRANSLATOR_URL\"")
 
+        val SIMPLE_TRANSLATOR_URL = dotenv["SIMPLE_TRANSLATOR_URL"]?.takeIf { it.isNotEmpty() } ?: "https://snipshot-back-end.onrender.com"
         buildConfigField("String", "SIMPLE_TRANSLATOR_URL", "\"$SIMPLE_TRANSLATOR_URL\"")
 
         val SUPABASE_URL = dotenv["SUPABASE_URL"]?.takeIf { it.isNotEmpty() } ?: "https://lsccpfjohkqfkrcxyybf.supabase.co/"
