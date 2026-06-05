@@ -43,7 +43,7 @@ class AllFoldersFragment : Fragment() {
                 val fragment = FolderDetailFragment.newInstance(folder.id, folder.name)
                 parentFragmentManager.beginTransaction()
                     .replace(R.id.fragment_container, fragment)
-                    .addToBackStack(null)
+                    .addToBackStack("folder_${folder.id}")
                     .commit()
             },
             onImageClick = { _ -> },
@@ -68,10 +68,14 @@ class AllFoldersFragment : Fragment() {
                 if (array != null) {
                     for (i in 0 until array.length()) {
                         val obj = array.getJSONObject(i)
-                        items.add(FileItem.Folder(obj.getInt("id"), obj.getString("name")))
+                        val fid = obj.getInt("id")
+                        val fname = obj.getString("name")
+                        val pid = if (obj.isNull("parent_folder_id")) null else obj.getInt("parent_folder_id")
+                        items.add(FileItem.Folder(fid, fname, parentFolderId = pid))
                     }
                 }
-                adapter.updateData(items)
+                val rootFolders = items.filter { it.parentFolderId == null }
+                adapter.updateData(rootFolders)
             } else {
                 Toast.makeText(context, "Failed to load folders", Toast.LENGTH_SHORT).show()
             }
@@ -81,11 +85,13 @@ class AllFoldersFragment : Fragment() {
     private fun showFolderContextMenu(folder: FileItem.Folder, anchor: View) {
         val popup = android.widget.PopupMenu(requireContext(), anchor)
         popup.menu.add(0, 1, 0, "Rename")
-        popup.menu.add(0, 2, 1, "Delete")
+        popup.menu.add(0, 2, 1, "Move")
+        popup.menu.add(0, 3, 2, "Delete")
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> { showRenameFolderDialog(folder); true }
-                2 -> { showDeleteFolderDialog(folder); true }
+                2 -> { showMoveFolderDialog(folder); true }
+                3 -> { showDeleteFolderDialog(folder); true }
                 else -> false
             }
         }
@@ -118,13 +124,72 @@ class AllFoldersFragment : Fragment() {
             .show()
     }
 
+    private fun showMoveFolderDialog(folder: FileItem.Folder) {
+        val bottomSheet = FolderPickerBottomSheet { targetParentId ->
+            if (targetParentId == folder.id) {
+                Toast.makeText(context, "Cannot move folder into itself", Toast.LENGTH_SHORT).show()
+                return@FolderPickerBottomSheet
+            }
+            lifecycleScope.launch {
+                val foldersResult = ApiClient.getFolders()
+                if (foldersResult.isSuccess) {
+                    val array = foldersResult.getOrNull()?.optJSONArray("folders")
+                    val foldersMap = mutableMapOf<Int, Int?>()
+                    if (array != null) {
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            val fid = obj.getInt("id")
+                            val pid = if (obj.isNull("parent_folder_id")) null else obj.getInt("parent_folder_id")
+                            foldersMap[fid] = pid
+                        }
+                    }
+
+                    if (targetParentId != null && isCircularAncestry(folder.id, targetParentId, foldersMap)) {
+                        Toast.makeText(context, "Cannot move folder into its own subfolder", Toast.LENGTH_LONG).show()
+                        return@launch
+                    }
+
+                    val result = ApiClient.moveFolder(folder.id, targetParentId)
+                    if (result.isSuccess) {
+                        Toast.makeText(context, "Folder moved successfully", Toast.LENGTH_SHORT).show()
+                        loadFolders()
+                    } else {
+                        Toast.makeText(context, "Failed to move folder", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(context, "Failed to fetch folders for validation", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        bottomSheet.show(parentFragmentManager, "FolderPicker")
+    }
+
+    private fun isCircularAncestry(folderIdBeingMoved: Int, targetParentFolderId: Int, foldersMap: Map<Int, Int?>): Boolean {
+        var currentId: Int? = targetParentFolderId
+        while (currentId != null) {
+            if (currentId == folderIdBeingMoved) {
+                return true
+            }
+            currentId = foldersMap[currentId]
+        }
+        return false
+    }
+
     private fun showDeleteFolderDialog(folder: FileItem.Folder) {
+        val modes = arrayOf("Promote contents (reassign items)", "Delete recursively (delete all)")
+        var selectedMode = 0
         AlertDialog.Builder(requireContext())
             .setTitle("Delete Folder")
-            .setMessage("Delete \"${folder.name}\"? Images inside will be moved to your main library.")
+            .setSingleChoiceItems(modes, selectedMode) { _, which ->
+                selectedMode = which
+            }
             .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch {
-                    val result = ApiClient.deleteFolder(folder.id, deleteImages = false)
+                    val result = if (selectedMode == 0) {
+                        ApiClient.deleteFolderPromote(folder.id, folder.parentFolderId)
+                    } else {
+                        ApiClient.deleteFolderRecursive(folder.id)
+                    }
                     if (result.isSuccess) {
                         Toast.makeText(context, "Folder deleted", Toast.LENGTH_SHORT).show()
                         loadFolders()

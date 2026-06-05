@@ -51,10 +51,12 @@ class ImageDetailActivity : AppCompatActivity() {
         var imageId = intent.getIntExtra("image_id", -1)
         val filename = intent.getStringExtra("filename") ?: "Unknown"
         var pathOrUrl = intent.getStringExtra("path_or_url")
+        var storagePath = intent.getStringExtra("storage_path")
         val localFilePath: String? = if (isLocal) pathOrUrl else null
 
         var previewImageId: Int = -1
         var previewPublicUrl: String? = null
+        var previewStoragePath: String? = null
 
         tvFilename.text = filename
 
@@ -64,19 +66,64 @@ class ImageDetailActivity : AppCompatActivity() {
             btnOpenBrowser.visibility = View.GONE
             val file = File(pathOrUrl ?: "")
             if (file.exists()) {
-                photoView.load(file)
+                photoView.load(file) {
+                    listener(
+                        onStart = { request -> android.util.Log.d("CoilImageDetail", "Start loading local file: ${request.data}") },
+                        onSuccess = { _, _ -> android.util.Log.d("CoilImageDetail", "Successfully loaded local file") },
+                        onError = { _, result -> android.util.Log.e("CoilImageDetail", "Error loading local file: ${result.throwable.message}", result.throwable) }
+                    )
+                }
             } else {
                 Toast.makeText(this, "File not found", Toast.LENGTH_SHORT).show()
                 finish()
             }
         } else {
-            photoView.load(pathOrUrl)
-            
-            btnOpenBrowser.setOnClickListener {
-                val currentPathOrUrl = pathOrUrl
-                if (currentPathOrUrl != null) {
-                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(currentPathOrUrl))
-                    startActivity(browserIntent)
+            val sPath = storagePath
+            if (!sPath.isNullOrEmpty()) {
+                lifecycleScope.launch {
+                    val signedUrl = ApiClient.getSignedUrl(sPath)
+                    android.util.Log.d("CoilImageDetail", "getSignedUrl result: $signedUrl")
+                    if (signedUrl != null) {
+                        photoView.load(signedUrl) {
+                            listener(
+                                onStart = { request -> android.util.Log.d("CoilImageDetail", "Start loading signed URL: ${request.data}") },
+                                onSuccess = { _, _ -> android.util.Log.d("CoilImageDetail", "Successfully loaded signed URL") },
+                                onError = { _, result -> android.util.Log.e("CoilImageDetail", "Error loading signed URL: ${result.throwable.message}", result.throwable) }
+                            )
+                        }
+                        btnOpenBrowser.setOnClickListener {
+                            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(signedUrl))
+                            startActivity(browserIntent)
+                        }
+                    } else {
+                        photoView.load(pathOrUrl) {
+                            listener(
+                                onStart = { request -> android.util.Log.d("CoilImageDetail", "Start loading fallback pathOrUrl: ${request.data}") },
+                                onSuccess = { _, _ -> android.util.Log.d("CoilImageDetail", "Successfully loaded fallback pathOrUrl") },
+                                onError = { _, result -> android.util.Log.e("CoilImageDetail", "Error loading fallback pathOrUrl: ${result.throwable.message}", result.throwable) }
+                            )
+                        }
+                        btnOpenBrowser.setOnClickListener {
+                            pathOrUrl?.let {
+                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
+                                startActivity(browserIntent)
+                            }
+                        }
+                    }
+                }
+            } else {
+                photoView.load(pathOrUrl) {
+                    listener(
+                        onStart = { request -> android.util.Log.d("CoilImageDetail", "Start loading pathOrUrl (no sPath): ${request.data}") },
+                        onSuccess = { _, _ -> android.util.Log.d("CoilImageDetail", "Successfully loaded pathOrUrl (no sPath)") },
+                        onError = { _, result -> android.util.Log.e("CoilImageDetail", "Error loading pathOrUrl (no sPath): ${result.throwable.message}", result.throwable) }
+                    )
+                }
+                btnOpenBrowser.setOnClickListener {
+                    pathOrUrl?.let {
+                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
+                        startActivity(browserIntent)
+                    }
                 }
             }
         }
@@ -87,11 +134,22 @@ class ImageDetailActivity : AppCompatActivity() {
                     if (event is UploadEvent.Success && event.filename == "[PREVIEW]_" + filename) {
                         previewImageId = event.imageId
                         previewPublicUrl = event.publicUrl
+                        previewStoragePath = event.storagePath
                         if (isLocal) {
                             btnOpenBrowser.visibility = View.VISIBLE
                             btnOpenBrowser.setOnClickListener {
-                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(event.publicUrl))
-                                startActivity(browserIntent)
+                                lifecycleScope.launch {
+                                    val sPath = event.storagePath
+                                    val urlToOpen = if (!sPath.isNullOrEmpty()) {
+                                        ApiClient.getSignedUrl(sPath)
+                                    } else {
+                                        event.publicUrl
+                                    }
+                                    if (urlToOpen != null) {
+                                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(urlToOpen))
+                                        startActivity(browserIntent)
+                                    }
+                                }
                             }
                         } else {
                             // If we already saved permanently, delete the preview immediately
@@ -143,17 +201,29 @@ class ImageDetailActivity : AppCompatActivity() {
                     val uploadedObj = uploadResult.getOrNull()
                     val newImageId = uploadedObj?.optInt("id", -1) ?: -1
                     val newPublicUrl = uploadedObj?.optString("public_url")
+                    val newStoragePath = uploadedObj?.optString("storage_path")
 
-                    if (newImageId != -1 && newPublicUrl != null) {
+                    if (newImageId != -1 && (!newPublicUrl.isNullOrEmpty() || !newStoragePath.isNullOrEmpty())) {
                         isLocal = false
                         imageId = newImageId
                         pathOrUrl = newPublicUrl
+                        storagePath = newStoragePath
 
                         btnSaveToAccount.visibility = View.GONE
                         btnOpenBrowser.visibility = View.VISIBLE
                         btnOpenBrowser.setOnClickListener {
-                            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(newPublicUrl))
-                            startActivity(browserIntent)
+                            lifecycleScope.launch {
+                                val sPath = storagePath
+                                val urlToOpen = if (!sPath.isNullOrEmpty()) {
+                                    ApiClient.getSignedUrl(sPath)
+                                } else {
+                                    pathOrUrl
+                                }
+                                if (urlToOpen != null) {
+                                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(urlToOpen))
+                                    startActivity(browserIntent)
+                                }
+                            }
                         }
 
                         Toast.makeText(this@ImageDetailActivity, "Saved to account!", Toast.LENGTH_SHORT).show()

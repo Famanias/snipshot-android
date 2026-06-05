@@ -40,6 +40,7 @@ class RecentFragment : Fragment() {
                         intent.putExtra("image_id", item.id)
                         intent.putExtra("filename", item.filename)
                         intent.putExtra("path_or_url", item.url)
+                        intent.putExtra("storage_path", item.storagePath)
                     }
                     is FileItem.LocalImage -> {
                         intent.putExtra("is_local", true)
@@ -102,7 +103,14 @@ class RecentFragment : Fragment() {
                         val obj = array.getJSONObject(i)
                         val fname = obj.getString("filename")
                         if (!fname.startsWith("[PREVIEW]_")) {
-                            items.add(FileItem.CloudImage(obj.getInt("id"), fname, obj.getString("public_url")))
+                            items.add(
+                                FileItem.CloudImage(
+                                    id = obj.getInt("id"),
+                                    filename = fname,
+                                    url = obj.optString("public_url", ""),
+                                    storagePath = obj.getString("storage_path")
+                                )
+                            )
                         }
                     }
                 }

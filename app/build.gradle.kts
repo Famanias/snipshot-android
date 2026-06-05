@@ -12,24 +12,23 @@ android {
         applicationId = "com.example.snipshot"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 203
+        versionName = "2.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val TRANSLATOR_URL: String by dotenv
+        val TRANSLATOR_URL = dotenv["TRANSLATOR_URL"]?.takeIf { it.isNotEmpty() } ?: "https://snipshot-snipshot-backend.hf.space"
         buildConfigField("String", "TRANSLATOR_URL", "\"$TRANSLATOR_URL\"")
 
-        val SIMPLE_TRANSLATOR_URL: String by dotenv
         buildConfigField("String", "SIMPLE_TRANSLATOR_URL", "\"$SIMPLE_TRANSLATOR_URL\"")
 
-        val SUPABASE_URL: String by dotenv
+        val SUPABASE_URL = dotenv["SUPABASE_URL"]?.takeIf { it.isNotEmpty() } ?: "https://lsccpfjohkqfkrcxyybf.supabase.co/"
         buildConfigField("String", "SUPABASE_URL", "\"$SUPABASE_URL\"")
 
-        val SUPABASE_ANON_KEY: String by dotenv
+        val SUPABASE_ANON_KEY = dotenv["SUPABASE_ANON_KEY"]?.takeIf { it.isNotEmpty() } ?: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzY2NwZmpvaGtxZmtyY3h5eWJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNzIxMTksImV4cCI6MjA4Mzg0ODExOX0.SKgsQ_tJyhqtlXjeE6WRyTr2Pv37Vi_KT3pA-78ne8c"
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$SUPABASE_ANON_KEY\"")
 
-        val SUPABASE_STORAGE_BUCKET: String by dotenv
+        val SUPABASE_STORAGE_BUCKET = dotenv["SUPABASE_STORAGE_BUCKET"]?.takeIf { it.isNotEmpty() } ?: "images"
         buildConfigField("String", "SUPABASE_STORAGE_BUCKET", "\"$SUPABASE_STORAGE_BUCKET\"")
     }
 

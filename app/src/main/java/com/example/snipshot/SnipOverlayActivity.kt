@@ -189,8 +189,9 @@ class SnipOverlayActivity : Activity() {
     private fun performMode1Manga(bitmap: Bitmap) {
         CoroutineScope(Dispatchers.Main).launch {
             progressBar.visibility = View.VISIBLE
+            val startTime = System.currentTimeMillis()
             try {
-                val backendUrl = BuildConfig.TRANSLATOR_URL
+                val backendUrl = BuildConfig.TRANSLATOR_URL.trimEnd('/')
                 val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
                 val targetLanguage = prefs.getString("target_language", "en") ?: "en"
                 
@@ -217,11 +218,16 @@ class SnipOverlayActivity : Activity() {
                     })
                 }
 
+                Log.d("TranslationPipeline", "Manga Mode (Mode 1) translation started")
+                Log.d("TranslationPipeline", "Target Language: $targetLang3, config: $configJson")
+                Log.d("TranslationPipeline", "Url: $backendUrl/translate/raw")
+
                 // 1. Helper to build a fresh RequestBody on demand
                 fun buildRequestBody(): okhttp3.RequestBody {
                     val stream = ByteArrayOutputStream()
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
                     val imageBytes = stream.toByteArray()
+                    Log.d("TranslationPipeline", "Request payload image size: ${imageBytes.size} bytes")
                     return okhttp3.MultipartBody.Builder()
                         .setType(okhttp3.MultipartBody.FORM)
                         .addFormDataPart("image", "snip.png", imageBytes.toRequestBody("image/png".toMediaType()))
@@ -236,36 +242,46 @@ class SnipOverlayActivity : Activity() {
                         .post(buildRequestBody())   // fresh body every time
                     ApiClient.accessToken?.let { token ->
                         builder.addHeader("Authorization", "Bearer $token")
+                        Log.d("TranslationPipeline", "Authorization Bearer token attached")
                     }
                     return builder.build()
                 }
 
                 // 3. First attempt
+                Log.d("TranslationPipeline", "Sending OkHttp request to Manga Translator...")
                 var response = withContext(Dispatchers.IO) { client.newCall(buildRequest()).execute() }
+                Log.d("TranslationPipeline", "Response code: ${response.code}, message: ${response.message}")
 
                 // 4. On 401, refresh session and retry once
                 if (response.code == 401) {
+                    Log.d("TranslationPipeline", "Manga Mode request failed with 401. Refreshing auth session...")
                     val refreshResult = ApiClient.refreshSession()
                     val newAccessToken = refreshResult.getOrNull()?.optString("access_token")
                     if (!newAccessToken.isNullOrEmpty()) {
                         ApiClient.accessToken = newAccessToken
+                        Log.d("TranslationPipeline", "Token refreshed successfully. Retrying request...")
                         response = withContext(Dispatchers.IO) {
                             client.newCall(buildRequest()).execute()
                         }
+                        Log.d("TranslationPipeline", "Retry response code: ${response.code}, message: ${response.message}")
                     }
 
                     // 5. If retry also fails, redirect to login
                     if (!response.isSuccessful) {
+                        Log.e("TranslationPipeline", "Retry failed with code ${response.code}. Redirecting to LoginActivity.")
                         navigateToLogin()
                         return@launch
                     }
                 }
                 
                 if (!response.isSuccessful) {
+                    val errBody = response.body?.string() ?: ""
+                    Log.e("TranslationPipeline", "Manga Translation failed with HTTP ${response.code}: $errBody")
                     throw Exception("Manga Translation failed: ${response.message}")
                 }
 
                 val responseBytes = response.body?.bytes() ?: throw Exception("Empty response body")
+                Log.d("TranslationPipeline", "Received translated image payload of size ${responseBytes.size} bytes")
                 
                 val decodedBitmap = BitmapFactory.decodeByteArray(responseBytes, 0, responseBytes.size)
                     ?: throw Exception("Failed to decode translated image bytes")
@@ -273,10 +289,12 @@ class SnipOverlayActivity : Activity() {
                 val uniquePrefix = "Snip_${java.util.UUID.randomUUID().toString().take(8)}"
                 val localFile = StorageManager.saveLocally(this@SnipOverlayActivity, decodedBitmap, uniquePrefix)
                     ?: throw Exception("Failed to save translated image locally")
+                Log.d("TranslationPipeline", "Translated image successfully saved locally to ${localFile.absolutePath}")
 
                 if (ApiClient.isLoggedIn()) {
                     val fileBytes = responseBytes
                     val filename = "[PREVIEW]_" + localFile.name
+                    Log.d("TranslationPipeline", "User is logged in. Uploading translated preview file to cloud: $filename")
                     SnipShotApp.applicationScope.launch(Dispatchers.IO) {
                         val uploadResult = ApiClient.uploadImage(
                             imageBytes = fileBytes,
@@ -285,15 +303,19 @@ class SnipOverlayActivity : Activity() {
                             targetLang = targetLanguage
                         )
                         if (uploadResult.isSuccess) {
+                            Log.d("TranslationPipeline", "Background cloud upload of preview succeeded")
                             // Check if local file was deleted by the user while the upload was in progress (TOCTOU gap)
                             if (!localFile.exists()) {
                                 val uploadedObj = uploadResult.getOrNull()
                                 val id = uploadedObj?.optInt("id", -1) ?: -1
                                 if (id != -1) {
+                                    Log.d("TranslationPipeline", "Local file was deleted during upload. Cleaning up cloud upload ID: $id")
                                     ApiClient.deleteImage(id)
                                 }
                             }
                         } else {
+                            val err = uploadResult.exceptionOrNull()?.message ?: "Unknown error"
+                            Log.e("TranslationPipeline", "Background cloud upload of preview failed: $err")
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(
                                     this@SnipOverlayActivity,
@@ -305,6 +327,9 @@ class SnipOverlayActivity : Activity() {
                     }
                 }
 
+                val duration = System.currentTimeMillis() - startTime
+                Log.d("TranslationPipeline", "Manga Mode translation completed successfully in ${duration}ms")
+
                 val intent = Intent(this@SnipOverlayActivity, ImageDetailActivity::class.java).apply {
                     putExtra("is_local", true)
                     putExtra("path_or_url", localFile.absolutePath)
@@ -314,7 +339,7 @@ class SnipOverlayActivity : Activity() {
                 finish()
 
             } catch (e: Exception) {
-                Log.e("SnipOverlayActivity", "Error in Manga Translation: ${e.message}", e)
+                Log.e("TranslationPipeline", "Error in Manga Translation: ${e.message}", e)
                 Toast.makeText(this@SnipOverlayActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 progressBar.visibility = View.GONE
@@ -325,17 +350,22 @@ class SnipOverlayActivity : Activity() {
     private fun performMode2OCR(bitmap: Bitmap) {
         CoroutineScope(Dispatchers.Main).launch {
             progressBar.visibility = View.VISIBLE
+            val startTime = System.currentTimeMillis()
             try {
                 // Convert bitmap to PNG bytes
                 val byteArrayOutputStream = ByteArrayOutputStream()
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
                 val imageBytes = byteArrayOutputStream.toByteArray()
-                Log.d("SnipOverlayActivity", "Sending Simple Translation request with image size: ${imageBytes.size} bytes")
 
                 // Get backend URL and settings
-                val backendUrl = BuildConfig.SIMPLE_TRANSLATOR_URL
+                val backendUrl = BuildConfig.SIMPLE_TRANSLATOR_URL.trimEnd('/')
                 val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
                 val targetLanguage = prefs.getString("target_language", "en") ?: "en"
+
+                Log.d("TranslationPipeline", "Simple OCR Mode (Mode 2) started")
+                Log.d("TranslationPipeline", "Target Language: $targetLanguage")
+                Log.d("TranslationPipeline", "Url: $backendUrl/translate-image")
+                Log.d("TranslationPipeline", "Sending request with image payload size: ${imageBytes.size} bytes")
 
                 // Create multipart request body
                 val requestBody = okhttp3.MultipartBody.Builder()
@@ -353,15 +383,23 @@ class SnipOverlayActivity : Activity() {
                     .post(requestBody)
                     .build()
 
+                Log.d("TranslationPipeline", "Executing simple translation request...")
                 val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
+                Log.d("TranslationPipeline", "Response code: ${response.code}, message: ${response.message}")
+
                 if (!response.isSuccessful) {
+                    val errBody = response.body?.string() ?: ""
+                    Log.e("TranslationPipeline", "Simple Translation failed with HTTP ${response.code}: $errBody")
                     throw Exception("Translation request failed: ${response.message}")
                 }
 
                 val responseBodyStr = response.body?.string() ?: "{}"
+                Log.d("TranslationPipeline", "Raw Response: $responseBodyStr")
                 val responseJson = JSONObject(responseBodyStr)
                 if (responseJson.has("error")) {
-                    throw Exception(responseJson.getString("error"))
+                    val errorMsg = responseJson.getString("error")
+                    Log.e("TranslationPipeline", "Simple Translation returned application error: $errorMsg")
+                    throw Exception(errorMsg)
                 }
 
                 // Extract fields returned by /translate-image
@@ -369,6 +407,9 @@ class SnipOverlayActivity : Activity() {
                 val extractedText = responseJson.optString("extracted_text", "")
                 val translatedText = responseJson.optString("translated_text", "")
                 val summary = responseJson.optString("summary", "")
+
+                val duration = System.currentTimeMillis() - startTime
+                Log.d("TranslationPipeline", "Simple OCR translation completed successfully in ${duration}ms")
 
                 // Launch TranslateActivity directly
                 val intent = Intent(this@SnipOverlayActivity, TranslateActivity::class.java).apply {
@@ -381,7 +422,7 @@ class SnipOverlayActivity : Activity() {
                 finish()
 
             } catch (e: Exception) {
-                Log.e("SnipOverlayActivity", "Error in Simple Translation: ${e.message}", e)
+                Log.e("TranslationPipeline", "Error in Simple Translation: ${e.message}", e)
                 Toast.makeText(this@SnipOverlayActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 progressBar.visibility = View.GONE

@@ -9,10 +9,15 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.example.snipshot.R
 import java.io.File
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
+import com.example.snipshot.api.ApiClient
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 sealed class FileItem {
-    data class Folder(val id: Int, val name: String, val count: Int = 0) : FileItem()
-    data class CloudImage(val id: Int, val filename: String, val url: String) : FileItem()
+    data class Folder(val id: Int, val name: String, val count: Int = 0, val parentFolderId: Int? = null) : FileItem()
+    data class CloudImage(val id: Int, val filename: String, val url: String?, val storagePath: String) : FileItem()
     data class LocalImage(val file: File) : FileItem()
 }
 
@@ -87,11 +92,29 @@ class FileItemAdapter(
     inner class ImageViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val ivThumb: ImageView = view.findViewById(R.id.iv_thumbnail)
         private val tvName: TextView = view.findViewById(R.id.tv_filename)
+        private var loadJob: Job? = null
 
         fun bindCloud(item: FileItem.CloudImage) {
             tvName.text = item.filename
-            ivThumb.load(item.url) {
-                crossfade(true)
+            loadJob?.cancel()
+            ivThumb.setImageDrawable(null)
+
+            val lifecycleOwner = itemView.findViewTreeLifecycleOwner() ?: (itemView.context as? androidx.lifecycle.LifecycleOwner)
+            if (lifecycleOwner != null) {
+                loadJob = lifecycleOwner.lifecycleScope.launch {
+                    val signedUrl = ApiClient.getSignedUrl(item.storagePath)
+                    if (signedUrl != null) {
+                        ivThumb.load(signedUrl) {
+                            crossfade(true)
+                        }
+                    }
+                }
+            } else {
+                if (!item.url.isNullOrEmpty()) {
+                    ivThumb.load(item.url) {
+                        crossfade(true)
+                    }
+                }
             }
             itemView.setOnClickListener { onImageClick(item) }
             itemView.setOnLongClickListener { onImageLongClick(item, itemView); true }

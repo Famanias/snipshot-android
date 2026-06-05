@@ -18,6 +18,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.json.JSONArray
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * ApiClient — Direct Supabase Integration
@@ -56,6 +59,14 @@ object ApiClient {
     var user: JSONObject? = null
         private set
 
+    data class SignedUrlCacheEntry(
+        val signedUrl: String,
+        val fetchedAt: Long
+    )
+
+    private val signedUrlCache = ConcurrentHashMap<String, SignedUrlCacheEntry>()
+    private val signedUrlSemaphore = Semaphore(3)
+
     // ─── Initialization ───────────────────────────────────────────────────────
 
     fun init(context: Context) {
@@ -86,6 +97,7 @@ object ApiClient {
         accessToken = null
         refreshToken = null
         user = null
+        signedUrlCache.clear()
         prefs.edit().clear().apply()
     }
 
@@ -211,6 +223,72 @@ object ApiClient {
         }
     }
 
+    // ─── Signed URL Caching & Loading ─────────────────────────────────────────
+
+    suspend fun getSignedUrl(storagePath: String): String? = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val cached = signedUrlCache[storagePath]
+        if (cached != null && (now - cached.fetchedAt) < 50 * 60 * 1000) {
+            return@withContext cached.signedUrl
+        }
+
+        // Fetch new signed URL, throttled via Semaphore
+        val url = signedUrlSemaphore.withPermit {
+            fetchSignedUrl(storagePath).getOrNull()
+        }
+        if (url != null) {
+            signedUrlCache[storagePath] = SignedUrlCacheEntry(url, now)
+            return@withContext url
+        }
+        return@withContext null
+    }
+
+    private suspend fun fetchSignedUrl(storagePath: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val token = accessToken ?: return@withContext Result.failure(Exception("Not logged in"))
+            val body = JSONObject().put("expiresIn", 3600)
+                .toString().toRequestBody(JSON)
+            
+            val request = Request.Builder()
+                .url("$supabaseUrl/storage/v1/object/sign/$storageBucket/$storagePath")
+                .headers(Headers.Builder()
+                    .add("apikey", anonKey)
+                    .add("Authorization", "Bearer $token")
+                    .add("Content-Type", "application/json")
+                    .build())
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val str = response.body?.string() ?: "{}"
+                if (response.isSuccessful) {
+                    val json = JSONObject(str)
+                    val url = json.optString("signedURL", json.optString("signedUrl", ""))
+                    if (url.isNotEmpty()) {
+                        val resolvedUrl = if (url.startsWith("/")) {
+                            val parsed = supabaseUrl.toHttpUrlOrNull()
+                            val path = if (url.startsWith("/object/")) "/storage/v1$url" else url
+                            if (parsed != null) {
+                                "${parsed.scheme}://${parsed.host}${if (parsed.port != 80 && parsed.port != 443) ":${parsed.port}" else ""}$path"
+                            } else {
+                                "$supabaseUrl$path"
+                            }
+                        } else {
+                            url
+                        }
+                        Result.success(resolvedUrl)
+                    } else {
+                        Result.failure(Exception("Signed URL is empty in response: $str"))
+                    }
+                } else {
+                    Result.failure(Exception("Failed to fetch signed URL: ${response.code} - $str"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ─── Images (PostgREST) ───────────────────────────────────────────────────
 
     /**
@@ -218,7 +296,7 @@ object ApiClient {
      * GET {supabaseUrl}/rest/v1/images?select=*&order=created_at.desc
      * RLS on Supabase filters by auth.uid() automatically.
      */
-    suspend fun getImages(folderId: Int? = null, page: Int = 1, perPage: Int = 50): Result<JSONObject> =
+    suspend fun getImages(folderId: Int? = null, isFolderIdNull: Boolean = false, page: Int = 1, perPage: Int = 50): Result<JSONObject> =
         withContext(Dispatchers.IO) {
             try {
                 val urlBuilder = "$supabaseUrl/rest/v1/images".toHttpUrlOrNull()!!.newBuilder()
@@ -228,6 +306,8 @@ object ApiClient {
                     .addQueryParameter("offset", ((page - 1) * perPage).toString())
                 if (folderId != null) {
                     urlBuilder.addQueryParameter("folder_id", "eq.$folderId")
+                } else if (isFolderIdNull) {
+                    urlBuilder.addQueryParameter("folder_id", "is.null")
                 }
                 val request = Request.Builder()
                     .url(urlBuilder.build())
@@ -314,7 +394,7 @@ object ApiClient {
                     if (resultObj.has("id")) {
                         val id = resultObj.optInt("id", -1)
                         val url = resultObj.optString("public_url", "")
-                        _uploadFlow.emit(UploadEvent.Success(filename, id, url))
+                        _uploadFlow.emit(UploadEvent.Success(filename, id, url, storagePath))
                     }
                     Result.success(resultObj)
                 } else {
@@ -434,15 +514,20 @@ object ApiClient {
      * Create a new folder.
      * POST {supabaseUrl}/rest/v1/folders
      */
-    suspend fun createFolder(name: String, description: String = ""): Result<JSONObject> =
+    suspend fun createFolder(name: String, description: String = "", parentFolderId: Int? = null): Result<JSONObject> =
         withContext(Dispatchers.IO) {
             try {
                 val userId = user?.optString("id") ?: return@withContext Result.failure(Exception("Not logged in"))
-                val body = JSONObject()
-                    .put("user_id", userId)
-                    .put("name", name)
-                    .put("description", description)
-                    .toString().toRequestBody(JSON)
+                val body = JSONObject().apply {
+                    put("user_id", userId)
+                    put("name", name)
+                    put("description", description)
+                    if (parentFolderId != null) {
+                        put("parent_folder_id", parentFolderId)
+                    } else {
+                        put("parent_folder_id", JSONObject.NULL)
+                    }
+                }.toString().toRequestBody(JSON)
                 val request = Request.Builder()
                     .url("$supabaseUrl/rest/v1/folders")
                     .headers(apiHeaders(mapOf("Prefer" to "return=representation")))
@@ -516,6 +601,202 @@ object ApiClient {
                         Result.failure(Exception("Failed to rename folder: $str"))
                     }
                 }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    /**
+     * Move a folder into another folder (updating parent_folder_id).
+     * PATCH {supabaseUrl}/rest/v1/folders?id=eq.{folderId}
+     */
+    suspend fun moveFolder(folderId: Int, parentFolderId: Int?): Result<JSONObject> =
+        withContext(Dispatchers.IO) {
+            try {
+                val body = JSONObject().apply {
+                    if (parentFolderId != null && parentFolderId != 0) {
+                        put("parent_folder_id", parentFolderId)
+                    } else {
+                        put("parent_folder_id", JSONObject.NULL)
+                    }
+                }.toString().toRequestBody(JSON)
+                val request = Request.Builder()
+                    .url("$supabaseUrl/rest/v1/folders?id=eq.$folderId")
+                    .headers(apiHeaders(mapOf("Prefer" to "return=representation")))
+                    .patch(body)
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    val str = response.body?.string() ?: "[]"
+                    if (response.isSuccessful) {
+                        val arr = JSONArray(str)
+                        Result.success(if (arr.length() > 0) arr.getJSONObject(0) else JSONObject())
+                    } else {
+                        Result.failure(Exception("Failed to move folder: $str"))
+                    }
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    /**
+     * Delete folder (Promote contents mode)
+     */
+    suspend fun deleteFolderPromote(folderId: Int, parentFolderId: Int?): Result<Boolean> =
+        withContext(Dispatchers.IO) {
+            try {
+                // 1. Reassign child folders
+                val folderBody = JSONObject().apply {
+                    if (parentFolderId != null) {
+                        put("parent_folder_id", parentFolderId)
+                    } else {
+                        put("parent_folder_id", JSONObject.NULL)
+                    }
+                }.toString().toRequestBody(JSON)
+                val folderReq = Request.Builder()
+                    .url("$supabaseUrl/rest/v1/folders?parent_folder_id=eq.$folderId")
+                    .headers(apiHeaders())
+                    .patch(folderBody)
+                    .build()
+                client.newCall(folderReq).execute().close()
+
+                // 2. Reassign child images
+                val imageBody = JSONObject().apply {
+                    if (parentFolderId != null) {
+                        put("folder_id", parentFolderId)
+                    } else {
+                        put("folder_id", JSONObject.NULL)
+                    }
+                }.toString().toRequestBody(JSON)
+                val imageReq = Request.Builder()
+                    .url("$supabaseUrl/rest/v1/images?folder_id=eq.$folderId")
+                    .headers(apiHeaders())
+                    .patch(imageBody)
+                    .build()
+                client.newCall(imageReq).execute().close()
+
+                // 3. Delete the folder itself
+                val deleteReq = Request.Builder()
+                    .url("$supabaseUrl/rest/v1/folders?id=eq.$folderId")
+                    .headers(apiHeaders())
+                    .delete()
+                    .build()
+                client.newCall(deleteReq).execute().use { response ->
+                    if (response.isSuccessful) Result.success(true)
+                    else Result.failure(Exception("Failed to delete folder row"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    private data class FolderDeleteHelper(val id: Int, val parentFolderId: Int?)
+
+    private suspend fun getImagesInFolders(folderIds: List<Int>): Result<List<JSONObject>> =
+        withContext(Dispatchers.IO) {
+            try {
+                if (folderIds.isEmpty()) return@withContext Result.success(emptyList())
+                val idsStr = folderIds.joinToString(",")
+                val request = Request.Builder()
+                    .url("$supabaseUrl/rest/v1/images?folder_id=in.($idsStr)&select=id,storage_path")
+                    .headers(apiHeaders())
+                    .get()
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val array = JSONArray(response.body?.string() ?: "[]")
+                        val list = mutableListOf<JSONObject>()
+                        for (i in 0 until array.length()) {
+                            list.add(array.getJSONObject(i))
+                        }
+                        Result.success(list)
+                    } else {
+                        Result.failure(Exception("Failed to get images in folders: ${response.code}"))
+                    }
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    /**
+     * Delete folder (Delete recursively mode)
+     */
+    suspend fun deleteFolderRecursive(folderId: Int): Result<Boolean> =
+        withContext(Dispatchers.IO) {
+            try {
+                // 1. Fetch all folders to find children/descendants in memory
+                val foldersResult = getFolders()
+                val foldersList = mutableListOf<FolderDeleteHelper>()
+                val foldersArray = foldersResult.getOrNull()?.optJSONArray("folders")
+                if (foldersArray != null) {
+                    for (i in 0 until foldersArray.length()) {
+                        val obj = foldersArray.getJSONObject(i)
+                        foldersList.add(
+                            FolderDeleteHelper(
+                                id = obj.getInt("id"),
+                                parentFolderId = if (obj.isNull("parent_folder_id")) null else obj.getInt("parent_folder_id")
+                            )
+                        )
+                    }
+                }
+
+                // Recursive bottom-up retrieval
+                val descendants = mutableListOf<Int>()
+                fun traverse(fid: Int) {
+                    val children = foldersList.filter { it.parentFolderId == fid }
+                    for (child in children) {
+                        traverse(child.id)
+                        descendants.add(child.id)
+                    }
+                }
+                traverse(folderId)
+                descendants.add(folderId) // bottom-up: deepest subfolders first, then parents, then folderId at the end
+
+                val idsStr = descendants.joinToString(",")
+
+                // 2. Fetch all images in these folders
+                val imagesResult = getImagesInFolders(descendants)
+                val imagesToDelete = imagesResult.getOrDefault(emptyList())
+
+                // 3. Delete files from Storage
+                val prefixes = JSONArray()
+                for (img in imagesToDelete) {
+                    val path = img.optString("storage_path")
+                    if (!path.isNullOrEmpty()) {
+                        prefixes.put(path)
+                    }
+                }
+                if (prefixes.length() > 0) {
+                    val delBody = JSONObject().put("prefixes", prefixes)
+                        .toString().toRequestBody(JSON)
+                    val storageDelRequest = Request.Builder()
+                        .url("$supabaseUrl/storage/v1/object/$storageBucket")
+                        .headers(apiHeaders())
+                        .delete(delBody)
+                        .build()
+                    client.newCall(storageDelRequest).execute().close()
+                }
+
+                // 4. Delete images rows
+                val imgDelReq = Request.Builder()
+                    .url("$supabaseUrl/rest/v1/images?folder_id=in.($idsStr)")
+                    .headers(apiHeaders())
+                    .delete()
+                    .build()
+                client.newCall(imgDelReq).execute().close()
+
+                // 5. Delete folders rows bottom-up
+                for (fid in descendants) {
+                    val folderDelReq = Request.Builder()
+                        .url("$supabaseUrl/rest/v1/folders?id=eq.$fid")
+                        .headers(apiHeaders())
+                        .delete()
+                        .build()
+                    client.newCall(folderDelReq).execute().close()
+                }
+
+                Result.success(true)
             } catch (e: Exception) {
                 Result.failure(e)
             }

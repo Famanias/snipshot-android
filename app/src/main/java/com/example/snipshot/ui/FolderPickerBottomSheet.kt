@@ -62,10 +62,12 @@ class FolderPickerBottomSheet(private val onFolderSelected: (Int?) -> Unit) : Bo
                 if (foldersArray != null) {
                     for (i in 0 until foldersArray.length()) {
                         val folderObj = foldersArray.getJSONObject(i)
+                        val pid = if (folderObj.isNull("parent_folder_id")) null else folderObj.getInt("parent_folder_id")
                         foldersList.add(
                             FolderItem(
                                 id = folderObj.getInt("id"),
-                                name = folderObj.getString("name")
+                                name = folderObj.getString("name"),
+                                parentFolderId = pid
                             )
                         )
                     }
@@ -78,7 +80,7 @@ class FolderPickerBottomSheet(private val onFolderSelected: (Int?) -> Unit) : Bo
         }
     }
 
-    data class FolderItem(val id: Int?, val name: String)
+    data class FolderItem(val id: Int?, val name: String, val parentFolderId: Int? = null)
 
     inner class FolderAdapter(
         private var folders: List<FolderItem>,
