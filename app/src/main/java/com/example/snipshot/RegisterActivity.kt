@@ -1,5 +1,6 @@
 package com.example.snipshot
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -58,6 +59,8 @@ class RegisterActivity : AppCompatActivity() {
         }
 
         loginLink.setOnClickListener {
+            val intent = Intent(this, LoginActivity::class.java)
+            startActivity(intent)
             finish()
         }
     }

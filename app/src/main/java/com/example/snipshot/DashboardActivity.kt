@@ -64,7 +64,12 @@ class DashboardActivity : AppCompatActivity() {
         }
 
         if (savedInstanceState == null) {
-            bottomNav.selectedItemId = R.id.nav_my_files
+            val selectTab = intent.getIntExtra("select_tab", -1)
+            if (selectTab != -1) {
+                bottomNav.selectedItemId = selectTab
+            } else {
+                bottomNav.selectedItemId = R.id.nav_my_files
+            }
         }
 
         if (!android.provider.Settings.canDrawOverlays(this)) {
@@ -114,6 +119,15 @@ class DashboardActivity : AppCompatActivity() {
                 true
             }
             else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val selectTab = intent.getIntExtra("select_tab", -1)
+        if (selectTab != -1) {
+            findViewById<BottomNavigationView>(R.id.bottom_navigation).selectedItemId = selectTab
         }
     }
 

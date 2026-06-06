@@ -42,7 +42,7 @@ class SettingsActivity : AppCompatActivity() {
 
         val appBarLayout = findViewById<com.google.android.material.appbar.AppBarLayout>(R.id.appBarLayout)
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
-        val footerView = findViewById<android.view.View>(R.id.footer_view)
+        val bottomNav = findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottom_navigation)
 
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -56,8 +56,9 @@ class SettingsActivity : AppCompatActivity() {
             insets
         }
 
-        val baseFooterPadding = footerView.paddingBottom
-        ViewCompat.setOnApplyWindowInsetsListener(footerView) { view, insets ->
+        bottomNav.selectedItemId = R.id.nav_settings
+        val baseFooterPadding = bottomNav.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(bottomNav) { view, insets ->
             val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
             view.setPadding(
                 view.paddingLeft,
@@ -68,11 +69,42 @@ class SettingsActivity : AppCompatActivity() {
             insets
         }
 
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_my_files -> {
+                    val intent = Intent(this, DashboardActivity::class.java).apply {
+                        putExtra("select_tab", R.id.nav_my_files)
+                        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    }
+                    startActivity(intent)
+                    finish()
+                    true
+                }
+                R.id.nav_recent -> {
+                    val intent = Intent(this, DashboardActivity::class.java).apply {
+                        putExtra("select_tab", R.id.nav_recent)
+                        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    }
+                    startActivity(intent)
+                    finish()
+                    true
+                }
+                R.id.nav_settings -> {
+                    true
+                }
+                else -> false
+            }
+        }
+
         val modeRadioGroup = findViewById<android.widget.RadioGroup>(R.id.mode_radio_group)
         val advancedLayout = findViewById<android.widget.LinearLayout>(R.id.advanced_settings_layout)
-        val etDetectorSize = findViewById<android.widget.EditText>(R.id.et_detector_size)
-        val etBoxThreshold = findViewById<android.widget.EditText>(R.id.et_box_threshold)
-        val etTextThreshold = findViewById<android.widget.EditText>(R.id.et_text_threshold)
+        val tvDetectorSizeValue = findViewById<TextView>(R.id.tv_detector_size_value)
+        val tvBoxThresholdValue = findViewById<TextView>(R.id.tv_box_threshold_value)
+        val tvTextThresholdValue = findViewById<TextView>(R.id.tv_text_threshold_value)
+
+        val sbDetectorSize = findViewById<android.widget.SeekBar>(R.id.et_detector_size)
+        val sbBoxThreshold = findViewById<android.widget.SeekBar>(R.id.et_box_threshold)
+        val sbTextThreshold = findViewById<android.widget.SeekBar>(R.id.et_text_threshold)
         val languageSpinner = findViewById<Spinner>(R.id.language_spinner)
         val btnLogout = findViewById<Button>(R.id.btn_logout)
         val tvAccountEmail = findViewById<TextView>(R.id.tv_account_email)
@@ -147,30 +179,51 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // ── Advanced parameters ───────────────────────────────────────────────
-        etDetectorSize.setText(sharedPreferences.getInt("detector_size", 1536).toString())
-        etBoxThreshold.setText(sharedPreferences.getFloat("box_threshold", 0.7f).toString())
-        etTextThreshold.setText(sharedPreferences.getFloat("text_threshold", 0.5f).toString())
+        val savedDetectorSize = sharedPreferences.getInt("detector_size", 1536)
+        sbDetectorSize.progress = savedDetectorSize
+        tvDetectorSizeValue.text = savedDetectorSize.toString()
 
-        etDetectorSize.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) {
-                if (!initializing) saveInt("detector_size", s.toString().toIntOrNull() ?: 1536)
+        val savedBoxThreshold = sharedPreferences.getFloat("box_threshold", 0.7f)
+        sbBoxThreshold.progress = (savedBoxThreshold * 100).toInt()
+        tvBoxThresholdValue.text = String.format("%.2f", savedBoxThreshold)
+
+        val savedTextThreshold = sharedPreferences.getFloat("text_threshold", 0.5f)
+        sbTextThreshold.progress = (savedTextThreshold * 100).toInt()
+        tvTextThresholdValue.text = String.format("%.2f", savedTextThreshold)
+
+        sbDetectorSize.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                tvDetectorSizeValue.text = progress.toString()
+                if (fromUser && !initializing) {
+                    saveInt("detector_size", progress)
+                }
             }
-            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
-            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
-        etBoxThreshold.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) {
-                if (!initializing) saveFloat("box_threshold", s.toString().toFloatOrNull() ?: 0.7f)
+
+        sbBoxThreshold.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                val floatVal = progress / 100.0f
+                tvBoxThresholdValue.text = String.format("%.2f", floatVal)
+                if (fromUser && !initializing) {
+                    saveFloat("box_threshold", floatVal)
+                }
             }
-            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
-            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
-        etTextThreshold.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) {
-                if (!initializing) saveFloat("text_threshold", s.toString().toFloatOrNull() ?: 0.5f)
+
+        sbTextThreshold.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                val floatVal = progress / 100.0f
+                tvTextThresholdValue.text = String.format("%.2f", floatVal)
+                if (fromUser && !initializing) {
+                    saveFloat("text_threshold", floatVal)
+                }
             }
-            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
-            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
         // ── Done initialising ─────────────────────────────────────────────────
