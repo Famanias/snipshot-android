@@ -329,6 +329,10 @@ class TranslationService : Service() {
                 Log.d("TranslationPipeline", "Token refreshed successfully. Retrying request...")
                 response = withContext(Dispatchers.IO) { client.newCall(buildRequest(newAccessToken)).execute() }
                 Log.d("TranslationPipeline", "Retry response code: ${response.code}, message: ${response.message}")
+            } else {
+                Log.e("TranslationPipeline", "Token refresh failed or returned empty.")
+                throw Exception("Session expired. Please log in again.")
+            }
 
             if (!response.isSuccessful) {
                 Log.e("TranslationPipeline", "Retry failed with code ${response.code}.")
