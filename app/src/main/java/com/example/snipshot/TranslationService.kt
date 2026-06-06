@@ -214,6 +214,7 @@ class TranslationService : Service() {
         Log.d("TranslationPipeline", "Response code: ${response.code}, message: ${response.message}")
 
         if (response.code == 401) {
+            response.close() // Close the first 401 response body/connection
             Log.d("TranslationPipeline", "Manga Mode request failed with 401. Refreshing auth session...")
             val refreshResult = ApiClient.refreshSession()
             val newAccessToken = refreshResult.getOrNull()?.optString("access_token")
@@ -222,6 +223,9 @@ class TranslationService : Service() {
                 Log.d("TranslationPipeline", "Token refreshed successfully. Retrying request...")
                 response = withContext(Dispatchers.IO) { client.newCall(buildRequest()).execute() }
                 Log.d("TranslationPipeline", "Retry response code: ${response.code}, message: ${response.message}")
+            } else {
+                Log.e("TranslationPipeline", "Token refresh failed or returned empty.")
+                throw Exception("Session expired. Please log in again.")
             }
 
             if (!response.isSuccessful) {
@@ -277,6 +281,11 @@ class TranslationService : Service() {
     }
 
     private suspend fun performMode2OCR(tempImagePath: String, targetLanguage: String) {
+        if (!ApiClient.isLoggedIn()) {
+            throw Exception("Please log in to use OCR translation.")
+        }
+        val initialToken = ApiClient.accessToken ?: throw Exception("Please log in to use OCR translation.")
+
         val bitmap = BitmapFactory.decodeFile(tempImagePath) ?: throw Exception("Failed to load snip image")
         val byteArrayOutputStream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
@@ -288,24 +297,44 @@ class TranslationService : Service() {
         Log.d("TranslationPipeline", "Target Language: $targetLanguage")
         Log.d("TranslationPipeline", "Url: $backendUrl/translate-image")
 
-        val requestBody = okhttp3.MultipartBody.Builder()
-            .setType(okhttp3.MultipartBody.FORM)
-            .addFormDataPart(
-                "image", 
-                "snip.png", 
-                imageBytes.toRequestBody("image/png".toMediaType())
-            )
-            .addFormDataPart("target_lang", targetLanguage)
-            .build()
+        fun buildRequest(token: String): Request {
+            val requestBody = okhttp3.MultipartBody.Builder()
+                .setType(okhttp3.MultipartBody.FORM)
+                .addFormDataPart(
+                    "image", 
+                    "snip.png", 
+                    imageBytes.toRequestBody("image/png".toMediaType())
+                )
+                .addFormDataPart("target_lang", targetLanguage)
+                .build()
 
-        val request = Request.Builder()
-            .url("$backendUrl/translate-image")
-            .post(requestBody)
-            .build()
+            return Request.Builder()
+                .url("$backendUrl/translate-image")
+                .post(requestBody)
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+        }
 
         Log.d("TranslationPipeline", "Executing simple translation request...")
-        val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
+        var response = withContext(Dispatchers.IO) { client.newCall(buildRequest(initialToken)).execute() }
         Log.d("TranslationPipeline", "Response code: ${response.code}, message: ${response.message}")
+
+        if (response.code == 401) {
+            response.close() // Close the first 401 response body/connection
+            Log.d("TranslationPipeline", "Simple OCR request failed with 401. Refreshing auth session...")
+            val refreshResult = ApiClient.refreshSession()
+            val newAccessToken = refreshResult.getOrNull()?.optString("access_token")
+            if (!newAccessToken.isNullOrEmpty()) {
+                ApiClient.accessToken = newAccessToken
+                Log.d("TranslationPipeline", "Token refreshed successfully. Retrying request...")
+                response = withContext(Dispatchers.IO) { client.newCall(buildRequest(newAccessToken)).execute() }
+                Log.d("TranslationPipeline", "Retry response code: ${response.code}, message: ${response.message}")
+
+            if (!response.isSuccessful) {
+                Log.e("TranslationPipeline", "Retry failed with code ${response.code}.")
+                throw Exception("Session expired. Please log in again.")
+            }
+        }
 
         if (!response.isSuccessful) {
             val errBody = response.body?.string() ?: ""
