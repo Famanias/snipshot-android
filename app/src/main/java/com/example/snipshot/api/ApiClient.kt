@@ -438,6 +438,32 @@ object ApiClient {
     }
 
     /**
+     * Rename an image.
+     * PATCH {supabaseUrl}/rest/v1/images?id=eq.{imageId}
+     */
+    suspend fun renameImage(imageId: Int, newName: String): Result<JSONObject> = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().put("filename", newName).toString().toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$supabaseUrl/rest/v1/images?id=eq.$imageId")
+                .headers(apiHeaders(mapOf("Prefer" to "return=representation")))
+                .patch(body)
+                .build()
+            client.newCall(request).execute().use { response ->
+                val str = response.body?.string() ?: "[]"
+                if (response.isSuccessful) {
+                    val arr = JSONArray(str)
+                    Result.success(if (arr.length() > 0) arr.getJSONObject(0) else JSONObject())
+                } else {
+                    Result.failure(Exception("Failed to rename image: $str"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Delete an image: remove from Storage then delete metadata row.
      * DELETE {supabaseUrl}/storage/v1/object/{bucket}
      * DELETE {supabaseUrl}/rest/v1/images?id=eq.{imageId}

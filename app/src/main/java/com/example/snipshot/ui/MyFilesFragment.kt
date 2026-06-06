@@ -304,29 +304,83 @@ class MyFilesFragment : Fragment() {
     private fun showImageContextMenu(item: FileItem, anchor: View) {
         if (item !is FileItem.CloudImage) return
         val popup = android.widget.PopupMenu(requireContext(), anchor)
-        popup.menu.add(0, 1, 0, "Delete")
+        popup.menu.add(0, 1, 0, "Edit image name")
+        popup.menu.add(0, 2, 0, "Move to folder")
+        popup.menu.add(0, 3, 0, "Delete")
         popup.setOnMenuItemClickListener { menuItem ->
-            if (menuItem.itemId == 1) {
-                AlertDialog.Builder(requireContext())
-                    .setTitle("Delete Image")
-                    .setMessage("Delete \"${item.filename}\"? This cannot be undone.")
-                    .setPositiveButton("Delete") { _, _ ->
-                        lifecycleScope.launch {
-                            val result = ApiClient.deleteImage(item.id)
-                            if (result.isSuccess) {
-                                Toast.makeText(context, "Image deleted", Toast.LENGTH_SHORT).show()
-                                loadCloudFiles()
-                            } else {
-                                Toast.makeText(context, "Delete failed", Toast.LENGTH_SHORT).show()
+            when (menuItem.itemId) {
+                1 -> {
+                    showRenameImageDialog(item)
+                    true
+                }
+                2 -> {
+                    showMoveImageDialog(item)
+                    true
+                }
+                3 -> {
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Delete Image")
+                        .setMessage("Delete \"${item.filename}\"? This cannot be undone.")
+                        .setPositiveButton("Delete") { _, _ ->
+                            lifecycleScope.launch {
+                                val result = ApiClient.deleteImage(item.id)
+                                if (result.isSuccess) {
+                                    Toast.makeText(context, "Image deleted", Toast.LENGTH_SHORT).show()
+                                    loadCloudFiles()
+                                } else {
+                                    Toast.makeText(context, "Delete failed", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-                true
-            } else false
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                    true
+                }
+                else -> false
+            }
         }
         popup.show()
+    }
+
+    private fun showRenameImageDialog(item: FileItem.CloudImage) {
+        val input = EditText(requireContext()).apply {
+            setText(item.filename)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            setPadding(48, 24, 48, 8)
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Edit Image Name")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isEmpty()) return@setPositiveButton
+                lifecycleScope.launch {
+                    val result = ApiClient.renameImage(item.id, newName)
+                    if (result.isSuccess) {
+                        Toast.makeText(context, "Image renamed to \"$newName\"", Toast.LENGTH_SHORT).show()
+                        loadCloudFiles()
+                    } else {
+                        Toast.makeText(context, "Rename failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showMoveImageDialog(item: FileItem.CloudImage) {
+        val bottomSheet = FolderPickerBottomSheet { targetParentId ->
+            lifecycleScope.launch {
+                val result = ApiClient.moveImage(item.id, targetParentId)
+                if (result.isSuccess) {
+                    Toast.makeText(context, "Image moved successfully", Toast.LENGTH_SHORT).show()
+                    loadCloudFiles()
+                } else {
+                    Toast.makeText(context, "Move failed", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        bottomSheet.show(parentFragmentManager, "folder_picker")
     }
 
     private fun showEmptyState(empty: Boolean) {
@@ -368,7 +422,7 @@ class MyFilesFragment : Fragment() {
                     for (i in 0 until array.length()) {
                         val obj = array.getJSONObject(i)
                         val fname = obj.getString("filename")
-                        if (!fname.startsWith("[PREVIEW]_")) {
+                        if (!fname.startsWith("PREVIEW_")) {
                             imageItems.add(
                                 FileItem.CloudImage(
                                     id = obj.getInt("id"),

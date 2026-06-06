@@ -131,7 +131,7 @@ class ImageDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 ApiClient.uploadFlow.collect { event ->
-                    if (event is UploadEvent.Success && event.filename == "[PREVIEW]_" + filename) {
+                    if (event is UploadEvent.Success && event.filename == "PREVIEW_" + filename) {
                         previewImageId = event.imageId
                         previewPublicUrl = event.publicUrl
                         previewStoragePath = event.storagePath
@@ -157,7 +157,7 @@ class ImageDetailActivity : AppCompatActivity() {
                                 ApiClient.deleteImage(event.imageId)
                             }
                         }
-                    } else if (event is UploadEvent.Failure && event.filename == "[PREVIEW]_" + filename) {
+                    } else if (event is UploadEvent.Failure && event.filename == "PREVIEW_" + filename) {
                         if (isLocal) {
                             Toast.makeText(this@ImageDetailActivity, "Cloud sync failed: ${event.error}", Toast.LENGTH_LONG).show()
                         }

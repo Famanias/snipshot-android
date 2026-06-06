@@ -293,7 +293,7 @@ class SnipOverlayActivity : Activity() {
 
                 if (ApiClient.isLoggedIn()) {
                     val fileBytes = responseBytes
-                    val filename = "[PREVIEW]_" + localFile.name
+                    val filename = "PREVIEW_" + localFile.name
                     Log.d("TranslationPipeline", "User is logged in. Uploading translated preview file to cloud: $filename")
                     SnipShotApp.applicationScope.launch(Dispatchers.IO) {
                         val uploadResult = ApiClient.uploadImage(
