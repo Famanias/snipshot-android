@@ -161,44 +161,80 @@ class SnipOverlayActivity : Activity() {
                 height.coerceAtMost(bitmap.height - top)
             )
 
-            // Save the cropped bitmap locally for history
-            saveBitmap(croppedBitmap)
-            
-            // Save to temp file for service transfer
-            val tempFile = try {
-                val dir = cacheDir
-                val file = File(dir, "temp_snip_${System.currentTimeMillis()}.png")
-                java.io.FileOutputStream(file).use { out ->
-                    croppedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            // Run quality checks off the main thread
+            CoroutineScope(Dispatchers.Main).launch {
+                val qualityResult = withContext(Dispatchers.Default) {
+                    com.example.snipshot.utils.ImageQualityChecker.analyze(croppedBitmap)
                 }
-                file
-            } catch (e: Exception) {
-                Log.e("SnipOverlayActivity", "Failed to save temp snip", e)
-                Toast.makeText(this, "Failed to prepare image for translation", Toast.LENGTH_SHORT).show()
-                return
+
+                if (qualityResult.reject) {
+                    Toast.makeText(
+                        this@SnipOverlayActivity,
+                        qualityResult.reason ?: "Selection is too small. Please select a larger area.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    croppedBitmap.recycle()
+                    return@launch
+                }
+
+                if (qualityResult.warn) {
+                    android.app.AlertDialog.Builder(this@SnipOverlayActivity)
+                        .setTitle("Poor Image Quality")
+                        .setMessage("${qualityResult.reason}\n\nDo you still want to continue with translation?")
+                        .setPositiveButton("Proceed Anyway") { _, _ ->
+                            proceedWithTranslation(croppedBitmap)
+                        }
+                        .setNegativeButton("Cancel") { _, _ ->
+                            croppedBitmap.recycle()
+                        }
+                        .show()
+                } else {
+                    proceedWithTranslation(croppedBitmap)
+                }
             }
-
-            val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
-            val savedMode = prefs.getString("translation_mode", TranslationMode.MODE_2_SIMPLE_OCR.name) ?: TranslationMode.MODE_2_SIMPLE_OCR.name
-            val targetLanguage = prefs.getString("target_language", "en") ?: "en"
-
-            val serviceIntent = Intent(this, TranslationService::class.java).apply {
-                putExtra(TranslationService.EXTRA_TEMP_IMAGE_PATH, tempFile.absolutePath)
-                putExtra(TranslationService.EXTRA_TRANSLATION_MODE, savedMode)
-                putExtra(TranslationService.EXTRA_TARGET_LANGUAGE, targetLanguage)
-            }
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
-
-            finish()
         } ?: run {
             Log.e("SnipOverlayActivity", "Screenshot Bitmap is null")
             Toast.makeText(this, "Failed to capture snip", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun proceedWithTranslation(croppedBitmap: Bitmap) {
+        // Save the cropped bitmap locally for history
+        saveBitmap(croppedBitmap)
+        
+        // Save to temp file for service transfer
+        val tempFile = try {
+            val dir = cacheDir
+            val file = File(dir, "temp_snip_${System.currentTimeMillis()}.png")
+            java.io.FileOutputStream(file).use { out ->
+                croppedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            file
+        } catch (e: Exception) {
+            Log.e("SnipOverlayActivity", "Failed to save temp snip", e)
+            Toast.makeText(this, "Failed to prepare image for translation", Toast.LENGTH_SHORT).show()
+            croppedBitmap.recycle()
+            return
+        }
+
+        val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
+        val savedMode = prefs.getString("translation_mode", TranslationMode.MODE_2_SIMPLE_OCR.name) ?: TranslationMode.MODE_2_SIMPLE_OCR.name
+        val targetLanguage = prefs.getString("target_language", "en") ?: "en"
+
+        val serviceIntent = Intent(this, TranslationService::class.java).apply {
+            putExtra(TranslationService.EXTRA_TEMP_IMAGE_PATH, tempFile.absolutePath)
+            putExtra(TranslationService.EXTRA_TRANSLATION_MODE, savedMode)
+            putExtra(TranslationService.EXTRA_TARGET_LANGUAGE, targetLanguage)
+        }
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+
+        croppedBitmap.recycle()
+        finish()
     }
 
     private fun saveBitmap(bitmap: Bitmap) {
