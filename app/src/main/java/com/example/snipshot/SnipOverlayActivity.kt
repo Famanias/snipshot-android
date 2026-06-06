@@ -62,6 +62,12 @@ class SnipOverlayActivity : Activity() {
 
         setContentView(R.layout.activity_snip_overlay)
 
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
         imageView = findViewById(R.id.snip_preview)
         drawingView = findViewById(R.id.drawing_view)
         progressBar = findViewById(R.id.ocr_progress)
@@ -140,6 +146,12 @@ class SnipOverlayActivity : Activity() {
                 return
             }
 
+            // Single active translation check
+            if (TranslationService.isRunning) {
+                Toast.makeText(this, "A translation is already in progress. Please wait for it to complete.", Toast.LENGTH_LONG).show()
+                return
+            }
+
             // Crop the bitmap to the selected region
             val croppedBitmap = Bitmap.createBitmap(
                 bitmap,
@@ -149,16 +161,40 @@ class SnipOverlayActivity : Activity() {
                 height.coerceAtMost(bitmap.height - top)
             )
 
+            // Save the cropped bitmap locally for history
             saveBitmap(croppedBitmap)
             
-            val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
-            val savedMode = prefs.getString("translation_mode", TranslationMode.MODE_2_SIMPLE_OCR.name)
-
-            if (savedMode == TranslationMode.MODE_1_MANGA.name) {
-                performMode1Manga(croppedBitmap)
-            } else {
-                performMode2OCR(croppedBitmap)
+            // Save to temp file for service transfer
+            val tempFile = try {
+                val dir = cacheDir
+                val file = File(dir, "temp_snip_${System.currentTimeMillis()}.png")
+                java.io.FileOutputStream(file).use { out ->
+                    croppedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+                file
+            } catch (e: Exception) {
+                Log.e("SnipOverlayActivity", "Failed to save temp snip", e)
+                Toast.makeText(this, "Failed to prepare image for translation", Toast.LENGTH_SHORT).show()
+                return
             }
+
+            val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
+            val savedMode = prefs.getString("translation_mode", TranslationMode.MODE_2_SIMPLE_OCR.name) ?: TranslationMode.MODE_2_SIMPLE_OCR.name
+            val targetLanguage = prefs.getString("target_language", "en") ?: "en"
+
+            val serviceIntent = Intent(this, TranslationService::class.java).apply {
+                putExtra(TranslationService.EXTRA_TEMP_IMAGE_PATH, tempFile.absolutePath)
+                putExtra(TranslationService.EXTRA_TRANSLATION_MODE, savedMode)
+                putExtra(TranslationService.EXTRA_TARGET_LANGUAGE, targetLanguage)
+            }
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+
+            finish()
         } ?: run {
             Log.e("SnipOverlayActivity", "Screenshot Bitmap is null")
             Toast.makeText(this, "Failed to capture snip", Toast.LENGTH_SHORT).show()
@@ -183,250 +219,6 @@ class SnipOverlayActivity : Activity() {
         } ?: run {
             Log.e("SnipOverlayActivity", "Failed to create media store entry")
             Toast.makeText(this, "Failed to save snip", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun performMode1Manga(bitmap: Bitmap) {
-        CoroutineScope(Dispatchers.Main).launch {
-            progressBar.visibility = View.VISIBLE
-            val startTime = System.currentTimeMillis()
-            try {
-                val backendUrl = BuildConfig.TRANSLATOR_URL.trimEnd('/')
-                val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
-                val targetLanguage = prefs.getString("target_language", "en") ?: "en"
-                
-                // Map language codes to 3-letter formats expected by manga translator if needed, or just send directly
-                val targetLang3 = when(targetLanguage) {
-                    "en" -> "ENG"
-                    "ja" -> "JPN"
-                    "ko" -> "KOR"
-                    "zh_cn" -> "CHS"
-                    "zh_tw" -> "CHT"
-                    else -> "ENG"
-                }
-
-                val detectorSize = prefs.getInt("detector_size", 1536)
-                val boxThreshold = prefs.getFloat("box_threshold", 0.7f).toDouble()
-                val textThreshold = prefs.getFloat("text_threshold", 0.5f).toDouble()
-
-                val configJson = JSONObject().apply {
-                    put("translator", JSONObject().put("target_lang", targetLang3))
-                    put("detector", JSONObject().apply {
-                        put("detection_size", detectorSize)
-                        put("box_threshold", boxThreshold)
-                        put("text_threshold", textThreshold)
-                    })
-                }
-
-                Log.d("TranslationPipeline", "Manga Mode (Mode 1) translation started")
-                Log.d("TranslationPipeline", "Target Language: $targetLang3, config: $configJson")
-                Log.d("TranslationPipeline", "Url: $backendUrl/translate/raw")
-
-                // 1. Helper to build a fresh RequestBody on demand
-                fun buildRequestBody(): okhttp3.RequestBody {
-                    val stream = ByteArrayOutputStream()
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-                    val imageBytes = stream.toByteArray()
-                    Log.d("TranslationPipeline", "Request payload image size: ${imageBytes.size} bytes")
-                    return okhttp3.MultipartBody.Builder()
-                        .setType(okhttp3.MultipartBody.FORM)
-                        .addFormDataPart("image", "snip.png", imageBytes.toRequestBody("image/png".toMediaType()))
-                        .addFormDataPart("config", configJson.toString())
-                        .build()
-                }
-
-                // 2. Helper to build a request with a fresh body and the current token
-                fun buildRequest(): Request {
-                    val builder = Request.Builder()
-                        .url("$backendUrl/translate/raw")
-                        .post(buildRequestBody())   // fresh body every time
-                    ApiClient.accessToken?.let { token ->
-                        builder.addHeader("Authorization", "Bearer $token")
-                        Log.d("TranslationPipeline", "Authorization Bearer token attached")
-                    }
-                    return builder.build()
-                }
-
-                // 3. First attempt
-                Log.d("TranslationPipeline", "Sending OkHttp request to Manga Translator...")
-                var response = withContext(Dispatchers.IO) { client.newCall(buildRequest()).execute() }
-                Log.d("TranslationPipeline", "Response code: ${response.code}, message: ${response.message}")
-
-                // 4. On 401, refresh session and retry once
-                if (response.code == 401) {
-                    Log.d("TranslationPipeline", "Manga Mode request failed with 401. Refreshing auth session...")
-                    val refreshResult = ApiClient.refreshSession()
-                    val newAccessToken = refreshResult.getOrNull()?.optString("access_token")
-                    if (!newAccessToken.isNullOrEmpty()) {
-                        ApiClient.accessToken = newAccessToken
-                        Log.d("TranslationPipeline", "Token refreshed successfully. Retrying request...")
-                        response = withContext(Dispatchers.IO) {
-                            client.newCall(buildRequest()).execute()
-                        }
-                        Log.d("TranslationPipeline", "Retry response code: ${response.code}, message: ${response.message}")
-                    }
-
-                    // 5. If retry also fails, redirect to login
-                    if (!response.isSuccessful) {
-                        Log.e("TranslationPipeline", "Retry failed with code ${response.code}. Redirecting to LoginActivity.")
-                        navigateToLogin()
-                        return@launch
-                    }
-                }
-                
-                if (!response.isSuccessful) {
-                    val errBody = response.body?.string() ?: ""
-                    Log.e("TranslationPipeline", "Manga Translation failed with HTTP ${response.code}: $errBody")
-                    throw Exception("Manga Translation failed: ${response.message}")
-                }
-
-                val responseBytes = response.body?.bytes() ?: throw Exception("Empty response body")
-                Log.d("TranslationPipeline", "Received translated image payload of size ${responseBytes.size} bytes")
-                
-                val decodedBitmap = BitmapFactory.decodeByteArray(responseBytes, 0, responseBytes.size)
-                    ?: throw Exception("Failed to decode translated image bytes")
-
-                val uniquePrefix = "Snip_${java.util.UUID.randomUUID().toString().take(8)}"
-                val localFile = StorageManager.saveLocally(this@SnipOverlayActivity, decodedBitmap, uniquePrefix)
-                    ?: throw Exception("Failed to save translated image locally")
-                Log.d("TranslationPipeline", "Translated image successfully saved locally to ${localFile.absolutePath}")
-
-                if (ApiClient.isLoggedIn()) {
-                    val fileBytes = responseBytes
-                    val filename = "PREVIEW_" + localFile.name
-                    Log.d("TranslationPipeline", "User is logged in. Uploading translated preview file to cloud: $filename")
-                    SnipShotApp.applicationScope.launch(Dispatchers.IO) {
-                        val uploadResult = ApiClient.uploadImage(
-                            imageBytes = fileBytes,
-                            filename = filename,
-                            sourceLang = null,
-                            targetLang = targetLanguage
-                        )
-                        if (uploadResult.isSuccess) {
-                            Log.d("TranslationPipeline", "Background cloud upload of preview succeeded")
-                            // Check if local file was deleted by the user while the upload was in progress (TOCTOU gap)
-                            if (!localFile.exists()) {
-                                val uploadedObj = uploadResult.getOrNull()
-                                val id = uploadedObj?.optInt("id", -1) ?: -1
-                                if (id != -1) {
-                                    Log.d("TranslationPipeline", "Local file was deleted during upload. Cleaning up cloud upload ID: $id")
-                                    ApiClient.deleteImage(id)
-                                }
-                            }
-                        } else {
-                            val err = uploadResult.exceptionOrNull()?.message ?: "Unknown error"
-                            Log.e("TranslationPipeline", "Background cloud upload of preview failed: $err")
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(
-                                    this@SnipOverlayActivity,
-                                    "Failed to sync with cloud: ${uploadResult.exceptionOrNull()?.message}",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    }
-                }
-
-                val duration = System.currentTimeMillis() - startTime
-                Log.d("TranslationPipeline", "Manga Mode translation completed successfully in ${duration}ms")
-
-                val intent = Intent(this@SnipOverlayActivity, ImageDetailActivity::class.java).apply {
-                    putExtra("is_local", true)
-                    putExtra("path_or_url", localFile.absolutePath)
-                    putExtra("filename", localFile.name)
-                }
-                startActivity(intent)
-                finish()
-
-            } catch (e: Exception) {
-                Log.e("TranslationPipeline", "Error in Manga Translation: ${e.message}", e)
-                Toast.makeText(this@SnipOverlayActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-            } finally {
-                progressBar.visibility = View.GONE
-            }
-        }
-    }
-
-    private fun performMode2OCR(bitmap: Bitmap) {
-        CoroutineScope(Dispatchers.Main).launch {
-            progressBar.visibility = View.VISIBLE
-            val startTime = System.currentTimeMillis()
-            try {
-                // Convert bitmap to PNG bytes
-                val byteArrayOutputStream = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
-                val imageBytes = byteArrayOutputStream.toByteArray()
-
-                // Get backend URL and settings
-                val backendUrl = BuildConfig.SIMPLE_TRANSLATOR_URL.trimEnd('/')
-                val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
-                val targetLanguage = prefs.getString("target_language", "en") ?: "en"
-
-                Log.d("TranslationPipeline", "Simple OCR Mode (Mode 2) started")
-                Log.d("TranslationPipeline", "Target Language: $targetLanguage")
-                Log.d("TranslationPipeline", "Url: $backendUrl/translate-image")
-                Log.d("TranslationPipeline", "Sending request with image payload size: ${imageBytes.size} bytes")
-
-                // Create multipart request body
-                val requestBody = okhttp3.MultipartBody.Builder()
-                    .setType(okhttp3.MultipartBody.FORM)
-                    .addFormDataPart(
-                        "image", 
-                        "snip.png", 
-                        imageBytes.toRequestBody("image/png".toMediaType())
-                    )
-                    .addFormDataPart("target_lang", targetLanguage)
-                    .build()
-
-                val request = Request.Builder()
-                    .url("$backendUrl/translate-image")
-                    .post(requestBody)
-                    .build()
-
-                Log.d("TranslationPipeline", "Executing simple translation request...")
-                val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
-                Log.d("TranslationPipeline", "Response code: ${response.code}, message: ${response.message}")
-
-                if (!response.isSuccessful) {
-                    val errBody = response.body?.string() ?: ""
-                    Log.e("TranslationPipeline", "Simple Translation failed with HTTP ${response.code}: $errBody")
-                    throw Exception("Translation request failed: ${response.message}")
-                }
-
-                val responseBodyStr = response.body?.string() ?: "{}"
-                Log.d("TranslationPipeline", "Raw Response: $responseBodyStr")
-                val responseJson = JSONObject(responseBodyStr)
-                if (responseJson.has("error")) {
-                    val errorMsg = responseJson.getString("error")
-                    Log.e("TranslationPipeline", "Simple Translation returned application error: $errorMsg")
-                    throw Exception(errorMsg)
-                }
-
-                // Extract fields returned by /translate-image
-                val detectedLanguage = responseJson.optString("detected_language", "unknown")
-                val extractedText = responseJson.optString("extracted_text", "")
-                val translatedText = responseJson.optString("translated_text", "")
-                val summary = responseJson.optString("summary", "")
-
-                val duration = System.currentTimeMillis() - startTime
-                Log.d("TranslationPipeline", "Simple OCR translation completed successfully in ${duration}ms")
-
-                // Launch TranslateActivity directly
-                val intent = Intent(this@SnipOverlayActivity, TranslateActivity::class.java).apply {
-                    putExtra("detected_language", detectedLanguage)
-                    putExtra("extracted_text", extractedText)
-                    putExtra("translated_text", translatedText)
-                    putExtra("summary", summary)
-                }
-                startActivity(intent)
-                finish()
-
-            } catch (e: Exception) {
-                Log.e("TranslationPipeline", "Error in Simple Translation: ${e.message}", e)
-                Toast.makeText(this@SnipOverlayActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-            } finally {
-                progressBar.visibility = View.GONE
-            }
         }
     }
 
