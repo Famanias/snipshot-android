@@ -21,6 +21,12 @@ import com.example.snipshot.api.ApiClient
 import com.example.snipshot.utils.StorageManager
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import android.util.Log
+import com.example.snipshot.TranslationService
+import com.example.snipshot.TranslationMode
 
 class MyFilesFragment : Fragment() {
     private lateinit var scrollView: View
@@ -28,7 +34,7 @@ class MyFilesFragment : Fragment() {
     private lateinit var rvImages: RecyclerView
     private lateinit var foldersSection: View
     private lateinit var btnViewAllFolders: Button
-    private lateinit var fabNewFolder: FloatingActionButton
+    private lateinit var fabActions: FloatingActionButton
     private lateinit var emptyState: LinearLayout
     private lateinit var offlineBanner: LinearLayout
     private lateinit var btnLogin: Button
@@ -37,6 +43,17 @@ class MyFilesFragment : Fragment() {
     private lateinit var imagesAdapter: FileItemAdapter
     private var wasLoggedIn: Boolean = false
 
+    private val selectImagesLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNullOrEmpty()) return@registerForActivityResult
+        if (uris.size > 20) {
+            Toast.makeText(context, "Please select up to 20 images.", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+        processSelectedImages(uris)
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = inflater.inflate(R.layout.fragment_my_files, container, false)
         scrollView = view.findViewById(R.id.scroll_view)
@@ -44,7 +61,7 @@ class MyFilesFragment : Fragment() {
         rvImages = view.findViewById(R.id.rv_images)
         foldersSection = view.findViewById(R.id.folders_section)
         btnViewAllFolders = view.findViewById(R.id.btn_view_all_folders)
-        fabNewFolder = view.findViewById(R.id.fab_new_folder)
+        fabActions = view.findViewById(R.id.fab_actions)
         emptyState = view.findViewById(R.id.empty_state)
         offlineBanner = view.findViewById(R.id.offline_banner)
         btnLogin = view.findViewById(R.id.btn_login)
@@ -115,8 +132,24 @@ class MyFilesFragment : Fragment() {
                 .commit()
         }
 
-        fabNewFolder.setOnClickListener {
-            showCreateFolderDialog()
+        fabActions.setOnClickListener { view ->
+            val popup = android.widget.PopupMenu(requireContext(), view)
+            popup.menu.add(0, 1, 0, "Create Folder")
+            popup.menu.add(0, 2, 1, "Translate via Upload")
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    1 -> {
+                        showCreateFolderDialog()
+                        true
+                    }
+                    2 -> {
+                        selectImagesLauncher.launch("image/*")
+                        true
+                    }
+                    else -> false
+                }
+            }
+            popup.show()
         }
 
         wasLoggedIn = ApiClient.isLoggedIn()
@@ -135,11 +168,11 @@ class MyFilesFragment : Fragment() {
     private fun refreshAuthState() {
         if (ApiClient.isLoggedIn()) {
             offlineBanner.visibility = View.GONE
-            fabNewFolder.visibility = View.VISIBLE
+            fabActions.visibility = View.VISIBLE
             loadCloudFiles()
         } else {
             offlineBanner.visibility = View.VISIBLE
-            fabNewFolder.visibility = View.GONE
+            fabActions.visibility = View.GONE
             loadLocalFiles()
         }
     }
@@ -447,6 +480,54 @@ class MyFilesFragment : Fragment() {
 
             imagesAdapter.updateData(imageItems)
             showEmptyState(rootFolders.isEmpty() && imageItems.isEmpty())
+        }
+    }
+
+    private fun processSelectedImages(uris: List<android.net.Uri>) {
+        lifecycleScope.launch {
+            val context = requireContext()
+            val prefs = context.getSharedPreferences("SnipShotPrefs", android.content.Context.MODE_PRIVATE)
+            val savedMode = prefs.getString("translation_mode", TranslationMode.MODE_2_SIMPLE_OCR.name) ?: TranslationMode.MODE_2_SIMPLE_OCR.name
+            val targetLanguage = prefs.getString("target_language", "en") ?: "en"
+            
+            var taskAdded = false
+
+            withContext(Dispatchers.IO) {
+                val queueDir = File(context.filesDir, "queue").apply { mkdirs() }
+                for (uri in uris) {
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                            val tempFile = File(queueDir, "task_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}.png")
+                            tempFile.outputStream().use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                            val task = com.example.snipshot.utils.TranslationTask(
+                                id = java.util.UUID.randomUUID().toString(),
+                                tempImagePath = tempFile.absolutePath,
+                                mode = savedMode,
+                                targetLanguage = targetLanguage,
+                                status = com.example.snipshot.utils.TranslationTask.Status.QUEUED
+                            )
+                            com.example.snipshot.utils.TranslationQueueManager.addTask(context, task)
+                            taskAdded = true
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MyFilesFragment", "Failed to copy image from URI: $uri", e)
+                    }
+                }
+            }
+
+            if (!taskAdded) {
+                Toast.makeText(context, "Failed to copy selected images", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            val serviceIntent = Intent(context, TranslationService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
         }
     }
 }

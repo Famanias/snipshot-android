@@ -4,12 +4,32 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+import java.io.FileInputStream
+import java.util.Properties
+
 android {
     namespace = "com.example.snipshot"
     compileSdk = 35
 
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties()
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
+    }
+
+    signingConfigs {
+        create("release") {
+            if (keystoreProperties.isNotEmpty()) {
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
+    }
+
     defaultConfig {
-        applicationId = "com.example.snipshot"
+        applicationId = "space.snipshot.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 203
@@ -37,6 +57,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

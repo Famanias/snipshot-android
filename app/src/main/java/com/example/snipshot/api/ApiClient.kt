@@ -470,6 +470,40 @@ object ApiClient {
     }
 
     /**
+     * Save a preview image by stripping the "PREVIEW_" prefix and optionally moving it to a folder.
+     * Performs an atomic PATCH operation updating both filename and folder_id.
+     * PATCH {supabaseUrl}/rest/v1/images?id=eq.{imageId}
+     */
+    suspend fun saveImageToFolder(imageId: Int, newName: String, folderId: Int?): Result<JSONObject> = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().apply {
+                put("filename", newName)
+                if (folderId != null && folderId != 0) {
+                    put("folder_id", folderId)
+                } else {
+                    put("folder_id", JSONObject.NULL)
+                }
+            }.toString().toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$supabaseUrl/rest/v1/images?id=eq.$imageId")
+                .headers(apiHeaders(mapOf("Prefer" to "return=representation")))
+                .patch(body)
+                .build()
+            client.newCall(request).execute().use { response ->
+                val str = response.body?.string() ?: "[]"
+                if (response.isSuccessful) {
+                    val arr = JSONArray(str)
+                    Result.success(if (arr.length() > 0) arr.getJSONObject(0) else JSONObject())
+                } else {
+                    Result.failure(Exception("Failed to save image: $str"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Rename an image.
      * PATCH {supabaseUrl}/rest/v1/images?id=eq.{imageId}
      */

@@ -16,7 +16,11 @@ import androidx.appcompat.app.AlertDialog
 import com.example.snipshot.R
 import com.example.snipshot.api.ApiClient
 import com.example.snipshot.utils.StorageManager
+import com.example.snipshot.utils.TranslationQueueManager
+import com.example.snipshot.utils.TranslationTask
+import com.example.snipshot.TranslationService
 import kotlinx.coroutines.launch
+import android.content.Intent
 
 class RecentFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
@@ -37,28 +41,57 @@ class RecentFragment : Fragment() {
         adapter = FileItemAdapter(emptyList(),
             onFolderClick = { },
             onImageClick = { item ->
-                val intent = android.content.Intent(context, com.example.snipshot.ImageDetailActivity::class.java)
                 when (item) {
                     is FileItem.CloudImage -> {
+                        val intent = Intent(context, com.example.snipshot.ImageDetailActivity::class.java)
                         intent.putExtra("is_local", false)
                         intent.putExtra("image_id", item.id)
                         intent.putExtra("filename", item.filename)
                         intent.putExtra("path_or_url", item.url)
                         intent.putExtra("storage_path", item.storagePath)
+                        startActivity(intent)
                     }
                     is FileItem.LocalImage -> {
+                        val intent = Intent(context, com.example.snipshot.ImageDetailActivity::class.java)
                         intent.putExtra("is_local", true)
                         intent.putExtra("filename", item.file.name)
                         intent.putExtra("path_or_url", item.file.absolutePath)
+                        startActivity(intent)
                     }
-                    else -> return@FileItemAdapter
+                    is FileItem.QueueItem -> {
+                        val intent = Intent(context, com.example.snipshot.ImageDetailActivity::class.java)
+                        intent.putExtra("is_queue", true)
+                        intent.putExtra("task_id", item.task.id)
+                        intent.putExtra("path_or_url", item.task.tempImagePath)
+                        startActivity(intent)
+                    }
+                    is FileItem.Folder -> {
+                        // Do nothing
+                    }
                 }
-                startActivity(intent)
             },
             onFolderLongClick = { folder, view -> },
             onImageLongClick = { item, view ->
-                if (item is FileItem.CloudImage) {
-                    showImageContextMenu(item, view)
+                showRecentImageContextMenu(item, view)
+            },
+            onImageSaveClick = { item, view ->
+                val cloudImage = when (item) {
+                    is FileItem.CloudImage -> item
+                    is FileItem.QueueItem -> {
+                        val task = item.task
+                        if (task.status == TranslationTask.Status.COMPLETED && task.completedImageId != null) {
+                            FileItem.CloudImage(
+                                id = task.completedImageId!!,
+                                filename = task.tempImagePath.substringAfterLast("/"),
+                                url = task.completedUrl,
+                                storagePath = task.completedStoragePath ?: ""
+                            )
+                        } else null
+                    }
+                    else -> null
+                }
+                if (cloudImage != null) {
+                    showSaveImagePopup(cloudImage, view)
                 }
             }
         )
@@ -67,6 +100,12 @@ class RecentFragment : Fragment() {
 
         wasLoggedIn = ApiClient.isLoggedIn()
         loadData()
+
+        lifecycleScope.launch {
+            TranslationQueueManager.tasks.collect {
+                loadData()
+            }
+        }
     }
 
     override fun onResume() {
@@ -93,9 +132,21 @@ class RecentFragment : Fragment() {
 
     private fun loadLocalRecent() {
         val files = StorageManager.getLocalFiles(requireContext())
-        val items = files.map { FileItem.LocalImage(it) }
-        adapter.updateData(items)
-        showEmptyState(items.isEmpty())
+        val completedItems = files.map { FileItem.LocalImage(it) }
+        
+        val activeTasks = TranslationQueueManager.tasks.value
+        val queueItems = mutableListOf<FileItem.QueueItem>()
+        for (task in activeTasks) {
+            if (task.status == TranslationTask.Status.COMPLETED) {
+                TranslationQueueManager.removeTask(requireContext(), task.id)
+            } else {
+                queueItems.add(FileItem.QueueItem(task))
+            }
+        }
+        
+        val combined = queueItems.sortedByDescending { it.task.timestamp } + completedItems
+        adapter.updateData(combined)
+        showEmptyState(combined.isEmpty())
     }
 
     private fun loadCloudRecent() {
@@ -103,13 +154,13 @@ class RecentFragment : Fragment() {
             val result = ApiClient.getImages()
             if (result.isSuccess) {
                 val array = result.getOrNull()?.optJSONArray("images")
-                val items = mutableListOf<FileItem>()
+                val cloudItems = mutableListOf<FileItem.CloudImage>()
                 if (array != null) {
                     for (i in 0 until array.length()) {
                         val obj = array.getJSONObject(i)
                         val fname = obj.getString("filename")
-                        if (!fname.startsWith("PREVIEW_")) {
-                            items.add(
+                        if (fname.startsWith("PREVIEW_")) {
+                            cloudItems.add(
                                 FileItem.CloudImage(
                                     id = obj.getInt("id"),
                                     filename = fname,
@@ -120,46 +171,46 @@ class RecentFragment : Fragment() {
                         }
                     }
                 }
-                adapter.updateData(items)
-                showEmptyState(items.isEmpty())
+                
+                val activeTasks = TranslationQueueManager.tasks.value
+                val queueItems = mutableListOf<FileItem.QueueItem>()
+                for (task in activeTasks) {
+                    if (task.status == TranslationTask.Status.COMPLETED) {
+                        val alreadyInCloud = cloudItems.any { it.id == task.completedImageId }
+                        if (alreadyInCloud) {
+                            TranslationQueueManager.removeTask(requireContext(), task.id)
+                        } else {
+                            queueItems.add(FileItem.QueueItem(task))
+                        }
+                    } else {
+                        queueItems.add(FileItem.QueueItem(task))
+                    }
+                }
+                
+                val combined = queueItems.sortedByDescending { it.task.timestamp } + cloudItems
+                adapter.updateData(combined)
+                showEmptyState(combined.isEmpty())
             } else {
-                showEmptyState(true)
+                val activeTasks = TranslationQueueManager.tasks.value
+                val queueItems = activeTasks.map { FileItem.QueueItem(it) }.sortedByDescending { it.task.timestamp }
+                adapter.updateData(queueItems)
+                showEmptyState(queueItems.isEmpty())
             }
         }
     }
 
-    private fun showImageContextMenu(item: FileItem.CloudImage, anchor: View) {
+    private fun showSaveImagePopup(item: FileItem.CloudImage, anchor: View) {
         val popup = android.widget.PopupMenu(requireContext(), anchor)
-        popup.menu.add(0, 1, 0, "Edit image name")
-        popup.menu.add(0, 2, 0, "Move to folder")
-        popup.menu.add(0, 3, 0, "Delete")
+        popup.menu.add(0, 1, 0, "Save to My Files")
+        popup.menu.add(0, 2, 0, "Save to Folder")
         popup.setOnMenuItemClickListener { menuItem ->
             when (menuItem.itemId) {
                 1 -> {
-                    showRenameImageDialog(item)
+                    saveCloudPreviewToFolder(item, null)
                     true
                 }
                 2 -> {
-                    showMoveImageDialog(item)
-                    true
-                }
-                3 -> {
-                    AlertDialog.Builder(requireContext())
-                        .setTitle("Delete Image")
-                        .setMessage("Delete \"${item.filename}\"? This cannot be undone.")
-                        .setPositiveButton("Delete") { _, _ ->
-                            lifecycleScope.launch {
-                                val result = ApiClient.deleteImage(item.id)
-                                if (result.isSuccess) {
-                                    Toast.makeText(context, "Image deleted", Toast.LENGTH_SHORT).show()
-                                    loadData()
-                                } else {
-                                    Toast.makeText(context, "Delete failed", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-                        .setNegativeButton("Cancel", null)
-                        .show()
+                    showRecentMoveImageDialog(item)
                     true
                 }
                 else -> false
@@ -168,25 +219,137 @@ class RecentFragment : Fragment() {
         popup.show()
     }
 
-    private fun showRenameImageDialog(item: FileItem.CloudImage) {
-        val input = EditText(requireContext()).apply {
-            setText(item.filename)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            setPadding(48, 24, 48, 8)
+    private fun showRecentImageContextMenu(item: FileItem, anchor: View) {
+        val popup = android.widget.PopupMenu(requireContext(), anchor)
+        if (item is FileItem.QueueItem) {
+            when (item.task.status) {
+                TranslationTask.Status.QUEUED -> {
+                    popup.menu.add(0, 1, 0, "Cancel Translation")
+                    popup.setOnMenuItemClickListener { menuItem ->
+                        if (menuItem.itemId == 1) {
+                            TranslationQueueManager.removeTask(requireContext(), item.task.id)
+                            Toast.makeText(context, "Translation cancelled", Toast.LENGTH_SHORT).show()
+                            true
+                        } else false
+                    }
+                    popup.show()
+                }
+                TranslationTask.Status.PREPARING, TranslationTask.Status.TRANSLATING, TranslationTask.Status.UPLOADING -> {
+                    Toast.makeText(context, "Translating... please wait", Toast.LENGTH_SHORT).show()
+                }
+                TranslationTask.Status.FAILED -> {
+                    popup.menu.add(0, 1, 0, "Retry Translation")
+                    popup.menu.add(0, 2, 0, "Delete")
+                    popup.setOnMenuItemClickListener { menuItem ->
+                        when (menuItem.itemId) {
+                            1 -> {
+                                retryTranslationTask(item.task)
+                                true
+                            }
+                            2 -> {
+                                TranslationQueueManager.removeTask(requireContext(), item.task.id)
+                                Toast.makeText(context, "Removed from queue", Toast.LENGTH_SHORT).show()
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    popup.show()
+                }
+                TranslationTask.Status.COMPLETED -> {
+                    val cloudImage = FileItem.CloudImage(
+                        id = item.task.completedImageId ?: -1,
+                        filename = item.task.tempImagePath.substringAfterLast("/"),
+                        url = item.task.completedUrl,
+                        storagePath = item.task.completedStoragePath ?: ""
+                    )
+                    showSaveImagePopup(cloudImage, anchor)
+                }
+            }
+        } else if (item is FileItem.CloudImage) {
+            popup.menu.add(0, 1, 0, "Save as Unfiled")
+            popup.menu.add(0, 2, 0, "Save to Folder")
+            popup.menu.add(0, 3, 0, "Delete")
+            popup.setOnMenuItemClickListener { menuItem ->
+                when (menuItem.itemId) {
+                    1 -> {
+                        saveCloudPreviewToFolder(item, null)
+                        true
+                    }
+                    2 -> {
+                        showRecentMoveImageDialog(item)
+                        true
+                    }
+                    3 -> {
+                        showDeletePreviewDialog(item)
+                        true
+                    }
+                    else -> false
+                }
+            }
+            popup.show()
+        } else if (item is FileItem.LocalImage) {
+            popup.menu.add(0, 3, 0, "Delete")
+            popup.setOnMenuItemClickListener { menuItem ->
+                when (menuItem.itemId) {
+                    3 -> {
+                        showDeleteLocalDialog(item)
+                        true
+                    }
+                    else -> false
+                }
+            }
+            popup.show()
         }
+    }
+
+    private fun retryTranslationTask(task: TranslationTask) {
+        TranslationQueueManager.updateTaskStatus(requireContext(), task.id, TranslationTask.Status.QUEUED)
+        val serviceIntent = Intent(requireContext(), TranslationService::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            requireContext().startForegroundService(serviceIntent)
+        } else {
+            requireContext().startService(serviceIntent)
+        }
+        Toast.makeText(context, "Retrying translation...", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun saveCloudPreviewToFolder(item: FileItem.CloudImage, folderId: Int?) {
+        lifecycleScope.launch {
+            val cleanName = item.filename.removePrefix("PREVIEW_")
+            val result = ApiClient.saveImageToFolder(item.id, cleanName, folderId)
+            if (result.isSuccess) {
+                if (folderId == null) {
+                    Toast.makeText(context, "Saved to My Files", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Saved to folder", Toast.LENGTH_SHORT).show()
+                }
+                loadData()
+            } else {
+                Toast.makeText(context, "Failed to save image", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showRecentMoveImageDialog(item: FileItem.CloudImage) {
+        val bottomSheet = FolderPickerBottomSheet { folderId ->
+            saveCloudPreviewToFolder(item, folderId)
+        }
+        bottomSheet.show(parentFragmentManager, "folder_picker")
+    }
+
+    private fun showDeletePreviewDialog(item: FileItem.CloudImage) {
         AlertDialog.Builder(requireContext())
-            .setTitle("Edit Image Name")
-            .setView(input)
-            .setPositiveButton("Save") { _, _ ->
-                val newName = input.text.toString().trim()
-                if (newName.isEmpty()) return@setPositiveButton
+            .setTitle("Delete Image")
+            .setMessage("Delete preview \"${item.filename}\"? This cannot be undone.")
+            .setPositiveButton("Delete") { _, _ ->
                 lifecycleScope.launch {
-                    val result = ApiClient.renameImage(item.id, newName)
+                    val result = ApiClient.deleteImage(item.id)
                     if (result.isSuccess) {
-                        Toast.makeText(context, "Image renamed to \"$newName\"", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Image deleted", Toast.LENGTH_SHORT).show()
                         loadData()
                     } else {
-                        Toast.makeText(context, "Rename failed", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Delete failed", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -194,18 +357,24 @@ class RecentFragment : Fragment() {
             .show()
     }
 
-    private fun showMoveImageDialog(item: FileItem.CloudImage) {
-        val bottomSheet = FolderPickerBottomSheet { targetParentId ->
-            lifecycleScope.launch {
-                val result = ApiClient.moveImage(item.id, targetParentId)
-                if (result.isSuccess) {
-                    Toast.makeText(context, "Image moved successfully", Toast.LENGTH_SHORT).show()
-                    loadData()
-                } else {
-                    Toast.makeText(context, "Move failed", Toast.LENGTH_SHORT).show()
+    private fun showDeleteLocalDialog(item: FileItem.LocalImage) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Delete Image")
+            .setMessage("Delete local image \"${item.file.name}\"? This cannot be undone.")
+            .setPositiveButton("Delete") { _, _ ->
+                try {
+                    val deleted = item.file.delete()
+                    if (deleted) {
+                        Toast.makeText(context, "Image deleted", Toast.LENGTH_SHORT).show()
+                        loadData()
+                    } else {
+                        Toast.makeText(context, "Failed to delete file", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Error deleting file: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
-        }
-        bottomSheet.show(parentFragmentManager, "folder_picker")
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }

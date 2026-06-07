@@ -26,19 +26,26 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.TimeUnit
+import com.example.snipshot.utils.TranslationTask
+import com.example.snipshot.utils.TranslationQueueManager
 
 class TranslationService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.MINUTES)
+        .readTimeout(5, TimeUnit.MINUTES)
+        .writeTimeout(5, TimeUnit.MINUTES)
         .build()
 
+    private var sessionSuccess = 0
+    private var sessionFail = 0
+    private val sessionTaskIds = mutableSetOf<String>()
+    private var processingJob: Job? = null
+
     companion object {
-        const val EXTRA_TEMP_IMAGE_PATH = "temp_image_path"
+        const val EXTRA_TEMP_IMAGE_PATHS = "temp_image_paths"
         const val EXTRA_TRANSLATION_MODE = "translation_mode"
         const val EXTRA_TARGET_LANGUAGE = "target_language"
 
@@ -58,47 +65,100 @@ class TranslationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
-        val tempImagePath = intent.getStringExtra(EXTRA_TEMP_IMAGE_PATH)
-        val translationMode = intent.getStringExtra(EXTRA_TRANSLATION_MODE) ?: TranslationMode.MODE_2_SIMPLE_OCR.name
-        val targetLanguage = intent.getStringExtra(EXTRA_TARGET_LANGUAGE) ?: "en"
-
-        if (tempImagePath.isNullOrEmpty() || !File(tempImagePath).exists()) {
-            Log.e("TranslationService", "Invalid temp image path")
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
         isRunning = true
         startForegroundServiceWithNotification()
 
-        serviceScope.launch {
-            try {
-                processTranslation(tempImagePath, translationMode, targetLanguage)
-            } catch (e: Exception) {
-                Log.e("TranslationService", "Translation pipeline failed", e)
-                postFailureNotification(e.message ?: "Unknown error")
-            } finally {
-                // Delete temp file to avoid leaking cache space
-                try {
-                    val file = File(tempImagePath)
-                    if (file.exists()) {
-                        file.delete()
-                    }
-                } catch (e: Exception) {
-                    Log.e("TranslationService", "Failed to delete temp file", e)
+        synchronized(this) {
+            if (processingJob == null || processingJob?.isActive == false) {
+                processingJob = serviceScope.launch {
+                    processQueue()
                 }
-                isRunning = false
-                stopForeground(true)
-                stopSelf()
             }
         }
 
         return START_NOT_STICKY
+    }
+
+    private suspend fun processQueue() {
+        while (true) {
+            val task = TranslationQueueManager.getNextQueuedTask(this) ?: break
+            sessionTaskIds.add(task.id)
+
+            val activeTasks = TranslationQueueManager.tasks.value
+            val activeCount = activeTasks.count {
+                it.status == TranslationTask.Status.QUEUED ||
+                it.status == TranslationTask.Status.PREPARING ||
+                it.status == TranslationTask.Status.TRANSLATING ||
+                it.status == TranslationTask.Status.UPLOADING
+            }
+            updateProgressNotification(activeCount)
+
+            try {
+                processTranslation(task)
+                sessionSuccess++
+            } catch (e: Exception) {
+                Log.e("TranslationService", "Failed to translate task ${task.id}", e)
+                sessionFail++
+                TranslationQueueManager.updateTaskStatus(this, task.id, TranslationTask.Status.FAILED, e.message ?: "Unknown error")
+            }
+        }
+
+        postSessionCompletionNotification()
+
+        sessionSuccess = 0
+        sessionFail = 0
+        sessionTaskIds.clear()
+        isRunning = false
+        stopForeground(true)
+        stopSelf()
+    }
+
+    private fun updateProgressNotification(activeCount: Int) {
+        val notification = NotificationCompat.Builder(this, CHANNEL_PROGRESS_ID)
+            .setContentTitle("Translating Images")
+            .setContentText("Processing translations ($activeCount remaining)...")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setProgress(100, 0, true)
+            .setOngoing(true)
+            .build()
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun postSessionCompletionNotification() {
+        val total = sessionTaskIds.size
+        if (total <= 1) return
+
+        val intent = Intent(this, DashboardActivity::class.java).apply {
+            putExtra("select_tab", R.id.nav_recent)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            2,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = if (sessionFail == 0) {
+            NotificationCompat.Builder(this, CHANNEL_COMPLETE_ID)
+                .setContentTitle("Translation Complete")
+                .setContentText("Successfully translated $sessionSuccess of $total images.")
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .build()
+        } else {
+            NotificationCompat.Builder(this, CHANNEL_COMPLETE_ID)
+                .setContentTitle("Translation Batch Completed")
+                .setContentText("Completed $sessionSuccess/$total. $sessionFail failed.")
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .build()
+        }
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_COMPLETE_ID, notification)
     }
 
     private fun startForegroundServiceWithNotification() {
@@ -147,20 +207,19 @@ class TranslationService : Service() {
         manager.createNotificationChannel(completeChannel)
     }
 
-    private suspend fun processTranslation(tempImagePath: String, translationMode: String, targetLanguage: String) {
-        if (translationMode == TranslationMode.MODE_1_MANGA.name) {
-            performMode1Manga(tempImagePath, targetLanguage)
+    private suspend fun processTranslation(task: TranslationTask) {
+        if (task.mode == TranslationMode.MODE_1_MANGA.name) {
+            performMode1Manga(task)
         } else {
-            performMode2OCR(tempImagePath, targetLanguage)
+            performMode2OCR(task)
         }
     }
 
-    private suspend fun performMode1Manga(tempImagePath: String, targetLanguage: String) {
+    private suspend fun performMode1Manga(task: TranslationTask) {
         val backendUrl = BuildConfig.TRANSLATOR_URL.trimEnd('/')
         val prefs = getSharedPreferences("SnipShotPrefs", MODE_PRIVATE)
 
-        // Map language codes to 3-letter formats expected by manga translator if needed, or just send directly
-        val targetLang3 = when (targetLanguage) {
+        val targetLang3 = when (task.targetLanguage) {
             "en" -> "ENG"
             "ja" -> "JPN"
             "ko" -> "KOR"
@@ -183,8 +242,9 @@ class TranslationService : Service() {
         }
 
         Log.d("TranslationPipeline", "Manga Mode (Mode 1) translation started")
+        TranslationQueueManager.updateTaskStatus(this, task.id, TranslationTask.Status.TRANSLATING)
         
-        val bitmap = BitmapFactory.decodeFile(tempImagePath) ?: throw Exception("Failed to load snip image")
+        val bitmap = BitmapFactory.decodeFile(task.tempImagePath) ?: throw Exception("Failed to load snip image")
 
         fun buildRequestBody(): okhttp3.RequestBody {
             val stream = ByteArrayOutputStream()
@@ -214,7 +274,7 @@ class TranslationService : Service() {
         Log.d("TranslationPipeline", "Response code: ${response.code}, message: ${response.message}")
 
         if (response.code == 401) {
-            response.close() // Close the first 401 response body/connection
+            response.close()
             Log.d("TranslationPipeline", "Manga Mode request failed with 401. Refreshing auth session...")
             val refreshResult = ApiClient.refreshSession()
             val newAccessToken = refreshResult.getOrNull()?.optString("access_token")
@@ -251,7 +311,12 @@ class TranslationService : Service() {
             ?: throw Exception("Failed to save translated image locally")
         Log.d("TranslationPipeline", "Translated image successfully saved locally to ${localFile.absolutePath}")
 
+        var uploadedImageId: Int? = null
+        var uploadedUrl: String? = null
+        var uploadedStoragePath: String? = null
+
         if (ApiClient.isLoggedIn()) {
+            TranslationQueueManager.updateTaskStatus(this, task.id, TranslationTask.Status.UPLOADING)
             val fileBytes = responseBytes
             val filename = "PREVIEW_" + localFile.name
             Log.d("TranslationPipeline", "User is logged in. Uploading translated preview file to cloud: $filename")
@@ -259,13 +324,17 @@ class TranslationService : Service() {
                 imageBytes = fileBytes,
                 filename = filename,
                 sourceLang = null,
-                targetLang = targetLanguage
+                targetLang = task.targetLanguage
             )
             if (uploadResult.isSuccess) {
                 Log.d("TranslationPipeline", "Background cloud upload of preview succeeded")
+                val uploadedObj = uploadResult.getOrNull()
+                uploadedImageId = uploadedObj?.optInt("id", -1) ?: -1
+                uploadedUrl = uploadedObj?.optString("public_url", "")
+                uploadedStoragePath = uploadedObj?.optString("storage_path", "")
+
                 if (!localFile.exists()) {
-                    val uploadedObj = uploadResult.getOrNull()
-                    val id = uploadedObj?.optInt("id", -1) ?: -1
+                    val id = uploadedImageId ?: -1
                     if (id != -1) {
                         Log.d("TranslationPipeline", "Local file was deleted during upload. Cleaning up cloud upload ID: $id")
                         ApiClient.deleteImage(id)
@@ -274,19 +343,32 @@ class TranslationService : Service() {
             } else {
                 val err = uploadResult.exceptionOrNull()?.message ?: "Unknown error"
                 Log.e("TranslationPipeline", "Background cloud upload of preview failed: $err")
+                throw Exception(err)
             }
         }
 
-        postMangaCompletionNotification(localFile)
+        TranslationQueueManager.markTaskCompleted(
+            this,
+            task.id,
+            uploadedImageId,
+            uploadedUrl,
+            uploadedStoragePath
+        )
+
+        if (sessionTaskIds.size <= 1) {
+            postMangaCompletionNotification(localFile)
+        }
     }
 
-    private suspend fun performMode2OCR(tempImagePath: String, targetLanguage: String) {
+    private suspend fun performMode2OCR(task: TranslationTask) {
         if (!ApiClient.isLoggedIn()) {
             throw Exception("Please log in to use OCR translation.")
         }
         val initialToken = ApiClient.accessToken ?: throw Exception("Please log in to use OCR translation.")
 
-        val bitmap = BitmapFactory.decodeFile(tempImagePath) ?: throw Exception("Failed to load snip image")
+        TranslationQueueManager.updateTaskStatus(this, task.id, TranslationTask.Status.TRANSLATING)
+
+        val bitmap = BitmapFactory.decodeFile(task.tempImagePath) ?: throw Exception("Failed to load snip image")
         val byteArrayOutputStream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
         val imageBytes = byteArrayOutputStream.toByteArray()
@@ -294,7 +376,7 @@ class TranslationService : Service() {
         val backendUrl = BuildConfig.SIMPLE_TRANSLATOR_URL.trimEnd('/')
 
         Log.d("TranslationPipeline", "Simple OCR Mode (Mode 2) started")
-        Log.d("TranslationPipeline", "Target Language: $targetLanguage")
+        Log.d("TranslationPipeline", "Target Language: ${task.targetLanguage}")
         Log.d("TranslationPipeline", "Url: $backendUrl/translate-image")
 
         fun buildRequest(token: String): Request {
@@ -305,7 +387,7 @@ class TranslationService : Service() {
                     "snip.png", 
                     imageBytes.toRequestBody("image/png".toMediaType())
                 )
-                .addFormDataPart("target_lang", targetLanguage)
+                .addFormDataPart("target_lang", task.targetLanguage)
                 .build()
 
             return Request.Builder()
@@ -320,7 +402,7 @@ class TranslationService : Service() {
         Log.d("TranslationPipeline", "Response code: ${response.code}, message: ${response.message}")
 
         if (response.code == 401) {
-            response.close() // Close the first 401 response body/connection
+            response.close()
             Log.d("TranslationPipeline", "Simple OCR request failed with 401. Refreshing auth session...")
             val refreshResult = ApiClient.refreshSession()
             val newAccessToken = refreshResult.getOrNull()?.optString("access_token")
@@ -360,7 +442,17 @@ class TranslationService : Service() {
         val translatedText = responseJson.optString("translated_text", "")
         val summary = responseJson.optString("summary", "")
 
-        postOcrCompletionNotification(detectedLanguage, extractedText, translatedText, summary)
+        TranslationQueueManager.markTaskCompleted(
+            this,
+            task.id,
+            null,
+            null,
+            null
+        )
+
+        if (sessionTaskIds.size <= 1) {
+            postOcrCompletionNotification(detectedLanguage, extractedText, translatedText, summary)
+        }
     }
 
     private fun postMangaCompletionNotification(localFile: File) {

@@ -17,6 +17,9 @@ import androidx.lifecycle.Lifecycle
 import com.example.snipshot.model.UploadEvent
 import coil.load
 import com.example.snipshot.api.ApiClient
+import com.example.snipshot.ui.FolderPickerBottomSheet
+import com.example.snipshot.utils.TranslationQueueManager
+import com.example.snipshot.utils.TranslationTask
 import com.github.chrisbanes.photoview.PhotoView
 import kotlinx.coroutines.launch
 import java.io.File
@@ -60,9 +63,26 @@ class ImageDetailActivity : AppCompatActivity() {
 
         tvFilename.text = filename
 
-        btnSaveToAccount.visibility = if (isLocal) View.VISIBLE else View.GONE
+        val isPreview = !isLocal && filename.startsWith("PREVIEW_")
+        val isQueue = intent.getBooleanExtra("is_queue", false)
+        val taskId = intent.getStringExtra("task_id")
 
-        if (isLocal) {
+        if (isQueue) {
+            btnSaveToAccount.visibility = View.GONE
+            btnOpenBrowser.visibility = View.GONE
+        } else {
+            btnSaveToAccount.visibility = if (isLocal || isPreview) View.VISIBLE else View.GONE
+        }
+
+        if (isQueue) {
+            val file = File(pathOrUrl ?: "")
+            if (file.exists()) {
+                photoView.load(file)
+            } else {
+                Toast.makeText(this, "File not found", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        } else if (isLocal) {
             btnOpenBrowser.visibility = View.GONE
             val file = File(pathOrUrl ?: "")
             if (file.exists()) {
@@ -166,82 +186,106 @@ class ImageDetailActivity : AppCompatActivity() {
             }
         }
 
+        if (!isQueue) {
         btnSaveToAccount.setOnClickListener {
-            if (!ApiClient.isLoggedIn()) {
-                Toast.makeText(this, "Please log in to save to your account", Toast.LENGTH_SHORT).show()
-                startActivity(Intent(this, LoginActivity::class.java))
-                return@setOnClickListener
-            }
-
-            btnSaveToAccount.isEnabled = false
-            val file = File(localFilePath ?: "")
-            if (!file.exists()) {
-                Toast.makeText(this, "Local file not found", Toast.LENGTH_SHORT).show()
-                btnSaveToAccount.isEnabled = true
-                return@setOnClickListener
-            }
-
-            lifecycleScope.launch {
-                val fileBytes = try {
-                    file.readBytes()
-                } catch (e: Exception) {
-                    Toast.makeText(this@ImageDetailActivity, "Failed to read file: ${e.message}", Toast.LENGTH_SHORT).show()
-                    btnSaveToAccount.isEnabled = true
-                    return@launch
+            if (isLocal) {
+                if (!ApiClient.isLoggedIn()) {
+                    Toast.makeText(this, "Please log in to save to your account", Toast.LENGTH_SHORT).show()
+                    startActivity(Intent(this, LoginActivity::class.java))
+                    return@setOnClickListener
                 }
 
-                val uploadResult = ApiClient.uploadImage(
-                    imageBytes = fileBytes,
-                    filename = filename,
-                    sourceLang = null,
-                    targetLang = null
-                )
+                btnSaveToAccount.isEnabled = false
+                val file = File(localFilePath ?: "")
+                if (!file.exists()) {
+                    Toast.makeText(this, "Local file not found", Toast.LENGTH_SHORT).show()
+                    btnSaveToAccount.isEnabled = true
+                    return@setOnClickListener
+                }
 
-                if (uploadResult.isSuccess) {
-                    val uploadedObj = uploadResult.getOrNull()
-                    val newImageId = uploadedObj?.optInt("id", -1) ?: -1
-                    val newPublicUrl = uploadedObj?.optString("public_url")
-                    val newStoragePath = uploadedObj?.optString("storage_path")
+                lifecycleScope.launch {
+                    val fileBytes = try {
+                        file.readBytes()
+                    } catch (e: Exception) {
+                        Toast.makeText(this@ImageDetailActivity, "Failed to read file: ${e.message}", Toast.LENGTH_SHORT).show()
+                        btnSaveToAccount.isEnabled = true
+                        return@launch
+                    }
 
-                    if (newImageId != -1 && (!newPublicUrl.isNullOrEmpty() || !newStoragePath.isNullOrEmpty())) {
-                        isLocal = false
-                        imageId = newImageId
-                        pathOrUrl = newPublicUrl
-                        storagePath = newStoragePath
+                    val uploadResult = ApiClient.uploadImage(
+                        imageBytes = fileBytes,
+                        filename = filename,
+                        sourceLang = null,
+                        targetLang = null
+                    )
 
-                        btnSaveToAccount.visibility = View.GONE
-                        btnOpenBrowser.visibility = View.VISIBLE
-                        btnOpenBrowser.setOnClickListener {
-                            lifecycleScope.launch {
-                                val sPath = storagePath
-                                val urlToOpen = if (!sPath.isNullOrEmpty()) {
-                                    ApiClient.getSignedUrl(sPath)
-                                } else {
-                                    pathOrUrl
-                                }
-                                if (urlToOpen != null) {
-                                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(urlToOpen))
-                                    startActivity(browserIntent)
+                    if (uploadResult.isSuccess) {
+                        val uploadedObj = uploadResult.getOrNull()
+                        val newImageId = uploadedObj?.optInt("id", -1) ?: -1
+                        val newPublicUrl = uploadedObj?.optString("public_url")
+                        val newStoragePath = uploadedObj?.optString("storage_path")
+
+                        if (newImageId != -1 && (!newPublicUrl.isNullOrEmpty() || !newStoragePath.isNullOrEmpty())) {
+                            isLocal = false
+                            imageId = newImageId
+                            pathOrUrl = newPublicUrl
+                            storagePath = newStoragePath
+
+                            btnSaveToAccount.visibility = View.GONE
+                            btnOpenBrowser.visibility = View.VISIBLE
+                            btnOpenBrowser.setOnClickListener {
+                                lifecycleScope.launch {
+                                    val sPath = storagePath
+                                    val urlToOpen = if (!sPath.isNullOrEmpty()) {
+                                        ApiClient.getSignedUrl(sPath)
+                                    } else {
+                                        pathOrUrl
+                                    }
+                                    if (urlToOpen != null) {
+                                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(urlToOpen))
+                                        startActivity(browserIntent)
+                                    }
                                 }
                             }
-                        }
 
-                        Toast.makeText(this@ImageDetailActivity, "Saved to account!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@ImageDetailActivity, "Saved to account!", Toast.LENGTH_SHORT).show()
 
-                        if (previewImageId != -1) {
-                            SnipShotApp.applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                ApiClient.deleteImage(previewImageId)
+                            if (previewImageId != -1) {
+                                SnipShotApp.applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    ApiClient.deleteImage(previewImageId)
+                                }
                             }
+                        } else {
+                            Toast.makeText(this@ImageDetailActivity, "Upload succeeded but failed to parse response", Toast.LENGTH_LONG).show()
+                            btnSaveToAccount.isEnabled = true
                         }
                     } else {
-                        Toast.makeText(this@ImageDetailActivity, "Upload succeeded but failed to parse response", Toast.LENGTH_LONG).show()
+                        val errMsg = uploadResult.exceptionOrNull()?.message ?: "Unknown error"
+                        Toast.makeText(this@ImageDetailActivity, "Failed to save: $errMsg", Toast.LENGTH_LONG).show()
                         btnSaveToAccount.isEnabled = true
                     }
-                } else {
-                    val errMsg = uploadResult.exceptionOrNull()?.message ?: "Unknown error"
-                    Toast.makeText(this@ImageDetailActivity, "Failed to save: $errMsg", Toast.LENGTH_LONG).show()
-                    btnSaveToAccount.isEnabled = true
                 }
+            } else if (!isLocal && filename.startsWith("PREVIEW_")) {
+                val popup = android.widget.PopupMenu(this, btnSaveToAccount)
+                popup.menu.add(0, 1, 0, "Save to My Files")
+                popup.menu.add(0, 2, 0, "Save to Folder")
+                popup.setOnMenuItemClickListener { menuItem ->
+                    when (menuItem.itemId) {
+                        1 -> {
+                            saveCloudPreview(imageId, filename, null, tvFilename, btnSaveToAccount)
+                            true
+                        }
+                        2 -> {
+                            val bottomSheet = FolderPickerBottomSheet { folderId ->
+                                saveCloudPreview(imageId, filename, folderId, tvFilename, btnSaveToAccount)
+                            }
+                            bottomSheet.show(supportFragmentManager, "folder_picker")
+                            true
+                        }
+                        else -> false
+                    }
+                }
+                popup.show()
             }
         }
 
@@ -281,6 +325,134 @@ class ImageDetailActivity : AppCompatActivity() {
                         Toast.makeText(this@ImageDetailActivity, "Failed to delete from cloud", Toast.LENGTH_SHORT).show()
                     }
                 }
+            }
+        }
+    }
+
+        if (isQueue && taskId != null) {
+            lifecycleScope.launch {
+                TranslationQueueManager.tasks.collect { tasks ->
+                    val task = tasks.find { it.id == taskId }
+                    if (task == null) {
+                        finish()
+                        return@collect
+                    }
+                    
+                    when (task.status) {
+                        TranslationTask.Status.QUEUED -> {
+                            tvFilename.text = "Queued (#${task.queuePosition})"
+                            btnDelete.visibility = View.VISIBLE
+                            btnDelete.setOnClickListener {
+                                TranslationQueueManager.removeTask(this@ImageDetailActivity, task.id)
+                                Toast.makeText(this@ImageDetailActivity, "Translation cancelled", Toast.LENGTH_SHORT).show()
+                                finish()
+                            }
+                            btnSaveToAccount.visibility = View.GONE
+                        }
+                        TranslationTask.Status.PREPARING -> {
+                            tvFilename.text = "Preparing..."
+                            btnDelete.visibility = View.GONE
+                            btnSaveToAccount.visibility = View.GONE
+                        }
+                        TranslationTask.Status.TRANSLATING -> {
+                            tvFilename.text = "Translating..."
+                            btnDelete.visibility = View.GONE
+                            btnSaveToAccount.visibility = View.GONE
+                        }
+                        TranslationTask.Status.UPLOADING -> {
+                            tvFilename.text = "Uploading..."
+                            btnDelete.visibility = View.GONE
+                            btnSaveToAccount.visibility = View.GONE
+                        }
+                        TranslationTask.Status.FAILED -> {
+                            tvFilename.text = "Failed: ${task.errorMessage ?: "Unknown error"}"
+                            btnDelete.visibility = View.VISIBLE
+                            btnDelete.setOnClickListener {
+                                TranslationQueueManager.removeTask(this@ImageDetailActivity, task.id)
+                                Toast.makeText(this@ImageDetailActivity, "Removed from queue", Toast.LENGTH_SHORT).show()
+                                finish()
+                            }
+                            
+                            btnSaveToAccount.setImageResource(android.R.drawable.ic_menu_rotate)
+                            btnSaveToAccount.visibility = View.VISIBLE
+                            btnSaveToAccount.setOnClickListener {
+                                TranslationQueueManager.updateTaskStatus(this@ImageDetailActivity, task.id, TranslationTask.Status.QUEUED)
+                                val serviceIntent = Intent(this@ImageDetailActivity, TranslationService::class.java)
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                    startForegroundService(serviceIntent)
+                                } else {
+                                    startService(serviceIntent)
+                                }
+                                Toast.makeText(this@ImageDetailActivity, "Retrying translation...", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        TranslationTask.Status.COMPLETED -> {
+                            tvFilename.text = "Completed"
+                            btnDelete.visibility = View.VISIBLE
+                            btnDelete.setOnClickListener {
+                                if (task.completedImageId != null) {
+                                    lifecycleScope.launch {
+                                        ApiClient.deleteImage(task.completedImageId!!)
+                                        TranslationQueueManager.removeTask(this@ImageDetailActivity, task.id)
+                                        Toast.makeText(this@ImageDetailActivity, "Deleted", Toast.LENGTH_SHORT).show()
+                                        finish()
+                                    }
+                                } else {
+                                    TranslationQueueManager.removeTask(this@ImageDetailActivity, task.id)
+                                    finish()
+                                }
+                            }
+                            
+                            btnSaveToAccount.setImageResource(android.R.drawable.ic_menu_save)
+                            btnSaveToAccount.visibility = View.VISIBLE
+                            btnSaveToAccount.setOnClickListener {
+                                val popup = android.widget.PopupMenu(this@ImageDetailActivity, btnSaveToAccount)
+                                popup.menu.add(0, 1, 0, "Save to My Files")
+                                popup.menu.add(0, 2, 0, "Save to Folder")
+                                popup.setOnMenuItemClickListener { menuItem ->
+                                    val cleanName = task.completedStoragePath?.substringAfterLast("PREVIEW_") ?: "Translated_Image.png"
+                                    when (menuItem.itemId) {
+                                        1 -> {
+                                            saveCloudPreview(task.completedImageId ?: -1, cleanName, null, tvFilename, btnSaveToAccount)
+                                            TranslationQueueManager.removeTask(this@ImageDetailActivity, task.id)
+                                            finish()
+                                            true
+                                        }
+                                        2 -> {
+                                            val bottomSheet = FolderPickerBottomSheet { folderId ->
+                                                saveCloudPreview(task.completedImageId ?: -1, cleanName, folderId, tvFilename, btnSaveToAccount)
+                                                TranslationQueueManager.removeTask(this@ImageDetailActivity, task.id)
+                                                finish()
+                                            }
+                                            bottomSheet.show(supportFragmentManager, "folder_picker")
+                                            true
+                                        }
+                                        else -> false
+                                    }
+                                }
+                                popup.show()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun saveCloudPreview(imageId: Int, filename: String, folderId: Int?, tvFilename: TextView, btnSave: ImageButton) {
+        lifecycleScope.launch {
+            val cleanName = filename.removePrefix("PREVIEW_")
+            val result = ApiClient.saveImageToFolder(imageId, cleanName, folderId)
+            if (result.isSuccess) {
+                if (folderId == null) {
+                    Toast.makeText(this@ImageDetailActivity, "Saved to My Files", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@ImageDetailActivity, "Saved to folder", Toast.LENGTH_SHORT).show()
+                }
+                tvFilename.text = cleanName
+                btnSave.visibility = View.GONE
+            } else {
+                Toast.makeText(this@ImageDetailActivity, "Failed to save image", Toast.LENGTH_SHORT).show()
             }
         }
     }

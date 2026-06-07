@@ -16,3 +16,7 @@ local.properties
 
 .env
 env
+
+# Keystore and signing configurations
+*.jks
+keystore.properties

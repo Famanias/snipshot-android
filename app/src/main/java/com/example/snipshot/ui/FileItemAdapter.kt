@@ -19,6 +19,7 @@ sealed class FileItem {
     data class Folder(val id: Int, val name: String, val count: Int = 0, val parentFolderId: Int? = null) : FileItem()
     data class CloudImage(val id: Int, val filename: String, val url: String?, val storagePath: String) : FileItem()
     data class LocalImage(val file: File) : FileItem()
+    data class QueueItem(val task: com.example.snipshot.utils.TranslationTask) : FileItem()
 }
 
 class FileItemAdapter(
@@ -27,7 +28,8 @@ class FileItemAdapter(
     private val onFolderClick: (FileItem.Folder) -> Unit,
     private val onImageClick: (FileItem) -> Unit,
     private val onFolderLongClick: (FileItem.Folder, View) -> Unit,
-    private val onImageLongClick: (FileItem, View) -> Unit
+    private val onImageLongClick: (FileItem, View) -> Unit,
+    private val onImageSaveClick: ((FileItem, View) -> Unit)? = null
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -38,7 +40,7 @@ class FileItemAdapter(
     override fun getItemViewType(position: Int): Int {
         return when (items[position]) {
             is FileItem.Folder -> TYPE_FOLDER
-            is FileItem.CloudImage, is FileItem.LocalImage -> TYPE_IMAGE
+            is FileItem.CloudImage, is FileItem.LocalImage, is FileItem.QueueItem -> TYPE_IMAGE
         }
     }
 
@@ -66,6 +68,7 @@ class FileItemAdapter(
             is FileItem.Folder -> (holder as FolderViewHolder).bind(item)
             is FileItem.CloudImage -> (holder as ImageViewHolder).bindCloud(item)
             is FileItem.LocalImage -> (holder as ImageViewHolder).bindLocal(item)
+            is FileItem.QueueItem -> (holder as ImageViewHolder).bindQueue(item)
         }
     }
 
@@ -92,12 +95,20 @@ class FileItemAdapter(
     inner class ImageViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val ivThumb: ImageView = view.findViewById(R.id.iv_thumbnail)
         private val tvName: TextView = view.findViewById(R.id.tv_filename)
+        private val btnSave: android.widget.ImageButton = view.findViewById(R.id.btn_save_image)
         private var loadJob: Job? = null
 
         fun bindCloud(item: FileItem.CloudImage) {
             tvName.text = item.filename
             loadJob?.cancel()
             ivThumb.setImageDrawable(null)
+
+            if (onImageSaveClick != null && item.filename.startsWith("PREVIEW_")) {
+                btnSave.visibility = View.VISIBLE
+                btnSave.setOnClickListener { onImageSaveClick.invoke(item, btnSave) }
+            } else {
+                btnSave.visibility = View.GONE
+            }
 
             val lifecycleOwner = itemView.findViewTreeLifecycleOwner() ?: (itemView.context as? androidx.lifecycle.LifecycleOwner)
             if (lifecycleOwner != null) {
@@ -122,9 +133,40 @@ class FileItemAdapter(
 
         fun bindLocal(item: FileItem.LocalImage) {
             tvName.text = item.file.name
+            btnSave.visibility = View.GONE
             ivThumb.load(item.file) {
                 crossfade(true)
             }
+            itemView.setOnClickListener { onImageClick(item) }
+            itemView.setOnLongClickListener { onImageLongClick(item, itemView); true }
+        }
+
+        fun bindQueue(item: FileItem.QueueItem) {
+            tvName.text = when (item.task.status) {
+                com.example.snipshot.utils.TranslationTask.Status.QUEUED -> {
+                    val pos = item.task.queuePosition
+                    "Queued (#$pos)"
+                }
+                com.example.snipshot.utils.TranslationTask.Status.PREPARING -> "Preparing..."
+                com.example.snipshot.utils.TranslationTask.Status.TRANSLATING -> "Translating..."
+                com.example.snipshot.utils.TranslationTask.Status.UPLOADING -> "Uploading..."
+                com.example.snipshot.utils.TranslationTask.Status.FAILED -> "Failed"
+                com.example.snipshot.utils.TranslationTask.Status.COMPLETED -> "Completed"
+            }
+
+            loadJob?.cancel()
+            ivThumb.setImageDrawable(null)
+            ivThumb.load(File(item.task.tempImagePath)) {
+                crossfade(true)
+            }
+
+            if (onImageSaveClick != null && item.task.status == com.example.snipshot.utils.TranslationTask.Status.COMPLETED) {
+                btnSave.visibility = View.VISIBLE
+                btnSave.setOnClickListener { onImageSaveClick.invoke(item, btnSave) }
+            } else {
+                btnSave.visibility = View.GONE
+            }
+
             itemView.setOnClickListener { onImageClick(item) }
             itemView.setOnLongClickListener { onImageLongClick(item, itemView); true }
         }

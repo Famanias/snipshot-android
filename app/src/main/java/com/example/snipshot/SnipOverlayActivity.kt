@@ -146,12 +146,6 @@ class SnipOverlayActivity : Activity() {
                 return
             }
 
-            // Single active translation check
-            if (TranslationService.isRunning) {
-                Toast.makeText(this, "A translation is already in progress. Please wait for it to complete.", Toast.LENGTH_LONG).show()
-                return
-            }
-
             // Crop the bitmap to the selected region
             val croppedBitmap = Bitmap.createBitmap(
                 bitmap,
@@ -202,10 +196,10 @@ class SnipOverlayActivity : Activity() {
         // Save the cropped bitmap locally for history
         saveBitmap(croppedBitmap)
         
-        // Save to temp file for service transfer
+        // Save to persistent queue directory
+        val queueDir = File(filesDir, "queue").apply { mkdirs() }
         val tempFile = try {
-            val dir = cacheDir
-            val file = File(dir, "temp_snip_${System.currentTimeMillis()}.png")
+            val file = File(queueDir, "task_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}.png")
             java.io.FileOutputStream(file).use { out ->
                 croppedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
@@ -221,12 +215,18 @@ class SnipOverlayActivity : Activity() {
         val savedMode = prefs.getString("translation_mode", TranslationMode.MODE_2_SIMPLE_OCR.name) ?: TranslationMode.MODE_2_SIMPLE_OCR.name
         val targetLanguage = prefs.getString("target_language", "en") ?: "en"
 
-        val serviceIntent = Intent(this, TranslationService::class.java).apply {
-            putExtra(TranslationService.EXTRA_TEMP_IMAGE_PATH, tempFile.absolutePath)
-            putExtra(TranslationService.EXTRA_TRANSLATION_MODE, savedMode)
-            putExtra(TranslationService.EXTRA_TARGET_LANGUAGE, targetLanguage)
-        }
+        // Create and enqueue translation task
+        val task = com.example.snipshot.utils.TranslationTask(
+            id = java.util.UUID.randomUUID().toString(),
+            tempImagePath = tempFile.absolutePath,
+            mode = savedMode,
+            targetLanguage = targetLanguage,
+            status = com.example.snipshot.utils.TranslationTask.Status.QUEUED
+        )
+        com.example.snipshot.utils.TranslationQueueManager.addTask(this, task)
 
+        // Start background service to process queue
+        val serviceIntent = Intent(this, TranslationService::class.java)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
         } else {

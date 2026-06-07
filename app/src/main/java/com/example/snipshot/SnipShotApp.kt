@@ -24,6 +24,7 @@ class SnipShotApp : Application(), Application.ActivityLifecycleCallbacks {
         super.onCreate()
         applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         ApiClient.init(this)
+        com.example.snipshot.utils.TranslationQueueManager.init(this)
         registerActivityLifecycleCallbacks(this)
     }
 

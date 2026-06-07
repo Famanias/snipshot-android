@@ -24,6 +24,19 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
+        <ImageButton
+            android:id="@+id/btn_save_image"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_margin="8dp"
+            android:src="@android:drawable/ic_menu_save"
+            app:tint="@android:color/white"
+            android:background="@drawable/bg_circle_save"
+            android:contentDescription="Save image"
+            app:layout_constraintTop_toTopOf="@id/iv_thumbnail"
+            app:layout_constraintEnd_toEndOf="@id/iv_thumbnail"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/tv_filename"
             android:layout_width="0dp"
