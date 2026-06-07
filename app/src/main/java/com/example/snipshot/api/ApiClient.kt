@@ -223,6 +223,38 @@ object ApiClient {
         }
     }
 
+    /**
+     * Send a password reset recovery email.
+     * POST {supabaseUrl}/auth/v1/recover
+     */
+    suspend fun resetPasswordForEmail(email: String, redirectTo: String = "https://snipshot.space/reset-password"): Result<JSONObject> = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject()
+                .put("email", email)
+                .put("redirect_to", redirectTo)
+                .toString()
+                .toRequestBody(JSON)
+            val encodedRedirect = java.net.URLEncoder.encode(redirectTo, "UTF-8")
+            val request = Request.Builder()
+                .url("$supabaseUrl/auth/v1/recover?redirect_to=$encodedRedirect")
+                .headers(authHeaders())
+                .post(body)
+                .build()
+            client.newCall(request).execute().use { response ->
+                val str = response.body?.string() ?: ""
+                val json = if (str.trim().isNotEmpty()) JSONObject(str) else JSONObject()
+                if (response.isSuccessful) {
+                    Result.success(json)
+                } else {
+                    val msg = json.optString("msg", json.optString("message", "Password reset request failed"))
+                    Result.failure(Exception(msg))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ─── Signed URL Caching & Loading ─────────────────────────────────────────
 
     suspend fun getSignedUrl(storagePath: String): String? = withContext(Dispatchers.IO) {
